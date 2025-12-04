@@ -229,7 +229,7 @@ jobs:
           fi
       
       - name: Configure AWS for S3 upload
-        if: inputs.upload_reports && secrets.aws_role_arn
+        if: inputs.upload_reports
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_role_arn }}
@@ -237,7 +237,7 @@ jobs:
           role-session-name: github-actions-python-test
       
       - name: Upload test reports to S3
-        if: inputs.upload_reports && secrets.aws_role_arn && always()
+        if: inputs.upload_reports && always()
         run: |
           DATETIME=$(date +"%Y%m%d-%H%M%S")
           PROJECT_NAME="${{ github.repository }}"

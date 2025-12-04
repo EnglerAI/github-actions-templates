@@ -94,7 +94,7 @@ jobs:
           bandit -r . -x /tests -f xml -o bandit.xml --exit-zero || exit 1
       
       - name: Configure AWS for S3 upload
-        if: inputs.upload_reports && secrets.aws_role_arn
+        if: inputs.upload_reports
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_role_arn }}
@@ -102,7 +102,7 @@ jobs:
           role-session-name: github-actions-security-scans
       
       - name: Upload bandit report to S3
-        if: inputs.upload_reports && secrets.aws_role_arn
+        if: inputs.upload_reports
         run: |
           DATETIME=$(date +"%Y%m%d-%H%M%S")
           PROJECT_NAME="${{ github.repository }}"
@@ -159,7 +159,7 @@ jobs:
             --output-file-path console,checkov.xml || exit 1
       
       - name: Configure AWS for S3 upload
-        if: inputs.upload_reports && secrets.aws_role_arn
+        if: inputs.upload_reports
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_role_arn }}
@@ -167,7 +167,7 @@ jobs:
           role-session-name: github-actions-security-scans
       
       - name: Upload checkov report to S3
-        if: inputs.upload_reports && secrets.aws_role_arn
+        if: inputs.upload_reports
         run: |
           DATETIME=$(date +"%Y%m%d-%H%M%S")
           PROJECT_NAME="${{ github.repository }}"
@@ -235,7 +235,7 @@ jobs:
           radon raw -i "tests" . -j -O radon-raw.json || exit 1
       
       - name: Configure AWS for S3 upload
-        if: inputs.upload_reports && secrets.aws_role_arn
+        if: inputs.upload_reports
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_role_arn }}
@@ -243,7 +243,7 @@ jobs:
           role-session-name: github-actions-security-scans
       
       - name: Upload radon reports to S3
-        if: inputs.upload_reports && secrets.aws_role_arn
+        if: inputs.upload_reports
         run: |
           DATETIME=$(date +"%Y%m%d-%H%M%S")
           PROJECT_NAME="${{ github.repository }}"
