@@ -1,0 +1,444 @@
+name: Lambda Deploy
+
+on:
+  workflow_call:
+    inputs:
+      function_name:
+        description: "Name of Lambda function (required)"
+        required: true
+        type: string
+      stack_name:
+        description: "CloudFormation stack name (defaults to function_name-stack)"
+        required: false
+        type: string
+      environment:
+        description: "Target environment (dev/qat/stg/prd)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region"
+        required: true
+        type: string
+        default: "us-east-2"
+      python_version:
+        description: "Python version"
+        required: false
+        type: string
+        default: "3.12"
+      sam_template:
+        description: "Path to SAM template file"
+        required: false
+        type: string
+        default: "template.yml"
+      requirements_file:
+        description: "Path to requirements.txt"
+        required: false
+        type: string
+        default: "requirements.txt"
+      run_tests:
+        description: "Run tests before deployment"
+        required: false
+        type: boolean
+        default: true
+      verify_s3_permissions:
+        description: "Verify S3 permissions before upload (recommended)"
+        required: false
+        type: boolean
+        default: true
+      kms_key_alias:
+        description: "KMS key alias for S3 encryption"
+        required: false
+        type: string
+        default: "alias/CloudBotPipelineKey"
+    secrets:
+      aws_role_arn:
+        description: "AWS IAM role ARN for OIDC"
+        required: true
+      aws_account_id:
+        description: "AWS Account ID"
+        required: true
+      gitlab_api_token:
+        description: "GitLab API token for private packages"
+        required: false
+
+jobs:
+  test:
+    if: inputs.run_tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f "${{ inputs.requirements_file }}" ]; then
+            pip install -r ${{ inputs.requirements_file }}
+          fi
+          pip install pytest pytest-cov pytest-mock moto
+
+      - name: Run tests
+        run: |
+          if [ -d "tests" ]; then
+            echo "Running pytest..."
+            pytest tests/ -v --cov=. --cov-report=term-missing
+          else
+            echo "No tests directory found, skipping tests"
+          fi
+
+  package:
+    needs: [test]
+    if: |
+      always() && 
+      (needs.test.result == 'success' || needs.test.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: "pip"
+
+      - name: Package Lambda function
+        run: |
+          echo "=== Packaging Lambda Function ==="
+
+          # Create package directory
+          mkdir -p package
+
+          # Install dependencies if requirements file exists
+          if [ -f "${{ inputs.requirements_file }}" ]; then
+            echo "Installing dependencies..."
+            
+            # Handle GitLab private packages if token provided
+            if [ -n "${{ secrets.gitlab_api_token }}" ]; then
+              echo "Configuring GitLab private package access..."
+              pip install \
+                --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
+                -r ${{ inputs.requirements_file }} \
+                -t package/
+            else
+              pip install -r ${{ inputs.requirements_file }} -t package/
+            fi
+          else
+            echo "No requirements.txt found, skipping dependency installation"
+          fi
+
+          # Copy Lambda function code
+          echo "Copying Lambda function code..."
+          if [ -f "lambda_function.py" ]; then
+            cp lambda_function.py package/
+          elif [ -f "app.py" ]; then
+            cp app.py package/
+          else
+            echo "Error: No lambda_function.py or app.py found"
+            exit 1
+          fi
+
+          # Copy any additional Python files (excluding tests)
+          find . -maxdepth 1 -name "*.py" ! -name "setup.py" ! -name "test_*.py" ! -name "*_test.py" -exec cp {} package/ \;
+
+          # Create deployment package
+          echo "Creating ZIP archive..."
+          cd package
+          zip -r ../function.zip . -x "*.pyc" -x "*__pycache__*" -x "*.git*"
+          cd ..
+
+          # Show package size
+          ls -lh function.zip
+          echo "✅ Lambda package created: $(du -h function.zip | cut -f1)"
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-package-${{ inputs.environment }}
+          path: function.zip
+          retention-days: 7
+
+  deploy:
+    needs: [package]
+    runs-on: ubuntu-latest
+    outputs:
+      stack_name: ${{ steps.deploy.outputs.stack_name }}
+      function_name: ${{ steps.deploy.outputs.function_name }}
+    environment:
+      name: ${{ inputs.environment }}
+      url: https://console.aws.amazon.com/lambda/home?region=${{ inputs.aws_region }}#/functions/${{ inputs.function_name }}-${{ inputs.environment }}
+    permissions:
+      id-token: write # Required for OIDC
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lambda-package-${{ inputs.environment }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions-lambda-deploy
+
+      - name: Verify AWS Identity and Account
+        run: |
+          echo "=== AWS Identity Verification ==="
+
+          # Get full caller identity
+          IDENTITY=$(aws sts get-caller-identity)
+          echo "$IDENTITY"
+
+          # Extract account ID
+          ACTUAL_ACCOUNT=$(echo "$IDENTITY" | jq -r .Account)
+          ACTUAL_ARN=$(echo "$IDENTITY" | jq -r .Arn)
+
+          echo ""
+          echo "=== Identity Details ==="
+          echo "Actual Account ID: ${ACTUAL_ACCOUNT}"
+          echo "Expected Account ID: ${{ secrets.aws_account_id }}"
+          echo "Region: ${{ inputs.aws_region }}"
+
+          # Verify account matches
+          if [ "${ACTUAL_ACCOUNT}" != "${{ secrets.aws_account_id }}" ]; then
+            echo ""
+            echo "❌ ERROR: Account mismatch detected!"
+            echo "   Expected: ${{ secrets.aws_account_id }}"
+            echo "   Actual: ${ACTUAL_ACCOUNT}"
+            echo ""
+            echo "Fix: Update AWS_ACCOUNT_ID secret to match the role's account"
+            exit 1
+          fi
+
+          echo "✅ Authenticated to correct account: ${{ inputs.environment }}"
+
+      - name: Test S3 Permissions
+        if: inputs.verify_s3_permissions
+        run: |
+          echo "=== Testing S3 Permissions ==="
+
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${{ inputs.aws_region }}-${{ secrets.aws_account_id }}"
+          ACTUAL_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+
+          echo "Target Bucket: ${ARTIFACTS_BUCKET}"
+          echo "Authenticated Account: ${ACTUAL_ACCOUNT}"
+
+          # Verify bucket exists
+          echo ""
+          echo "1. Verifying bucket exists..."
+          if aws s3api head-bucket --bucket "${ARTIFACTS_BUCKET}" 2>&1; then
+            echo "✅ Bucket exists and is accessible"
+          else
+            echo "❌ Bucket doesn't exist or not accessible"
+            exit 1
+          fi
+
+          echo ""
+          echo "2. Testing ListBucket..."
+          if aws s3 ls "s3://${ARTIFACTS_BUCKET}/lambda-packages/" 2>&1; then
+            echo "✅ ListBucket succeeded"
+          else
+            echo "⚠️  ListBucket failed (may need to create prefix)"
+          fi
+
+          echo ""
+          echo "3. Testing PutObject with KMS..."
+          echo "test-content" > /tmp/test-permissions.txt
+          if aws s3 cp /tmp/test-permissions.txt "s3://${ARTIFACTS_BUCKET}/test-github-actions-${{ github.run_id }}.txt" \
+            --sse aws:kms \
+            --sse-kms-key-id ${{ inputs.kms_key_alias }} 2>&1; then
+            echo "✅ PutObject succeeded"
+            
+            # Clean up test file
+            echo ""
+            echo "4. Testing DeleteObject..."
+            if aws s3 rm "s3://${ARTIFACTS_BUCKET}/test-github-actions-${{ github.run_id }}.txt" 2>&1; then
+              echo "✅ DeleteObject succeeded"
+            else
+              echo "⚠️  DeleteObject failed (not critical)"
+            fi
+          else
+            echo "❌ PutObject failed"
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ All S3 permission tests passed!"
+
+      - name: Install SAM CLI
+        run: |
+          echo "=== Installing SAM CLI ==="
+          pip install aws-sam-cli
+          sam --version
+
+      - name: Upload to S3
+        run: |
+          echo "=== Uploading to S3 ==="
+
+          # S3 bucket for artifacts (matches GitLab CI/CD approach)
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${{ inputs.aws_region }}-${{ secrets.aws_account_id }}"
+          S3_KEY="lambda-packages/${{ inputs.function_name }}/function-${{ github.sha }}.zip"
+
+          echo "Bucket: ${ARTIFACTS_BUCKET}"
+          echo "Key: ${S3_KEY}"
+
+          # Upload to S3 with KMS encryption (required by bucket policy)
+          aws s3 cp function.zip "s3://${ARTIFACTS_BUCKET}/${S3_KEY}" \
+            --sse aws:kms \
+            --sse-kms-key-id ${{ inputs.kms_key_alias }}
+
+          echo "s3_bucket=${ARTIFACTS_BUCKET}" >> $GITHUB_ENV
+          echo "s3_key=${S3_KEY}" >> $GITHUB_ENV
+
+          echo "✅ Package uploaded to S3 with KMS encryption"
+
+      - name: Deploy with SAM
+        run: |
+          echo "=== Deploying with SAM ==="
+
+          # Determine stack name
+          if [ -n "${{ inputs.stack_name }}" ]; then
+            STACK_NAME="${{ inputs.stack_name }}"
+          else
+            STACK_NAME="${{ inputs.function_name }}-stack"
+          fi
+
+          echo "Stack Name: ${STACK_NAME}"
+          echo "Template: ${{ inputs.sam_template }}"
+
+          # Verify template exists
+          if [ ! -f "${{ inputs.sam_template }}" ]; then
+            echo "❌ Error: SAM template not found: ${{ inputs.sam_template }}"
+            exit 1
+          fi
+
+          # Deploy using SAM (matches GitLab CI/CD approach)
+          sam deploy \
+            --template-file ${{ inputs.sam_template }} \
+            --stack-name ${STACK_NAME} \
+            --parameter-overrides \
+              ARTIFACTSBUCKET=${{ env.s3_bucket }} \
+              S3Key=${{ env.s3_key }} \
+              ACCOUNTID=${{ secrets.aws_account_id }} \
+              NAME=${{ inputs.function_name }} \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset \
+            --region ${{ inputs.aws_region }}
+
+          echo "stack_name=${STACK_NAME}" >> $GITHUB_ENV
+          echo "✅ SAM deployment completed"
+
+      - name: Get function info
+        id: deploy
+        run: |
+          echo "=== Lambda Function Info ==="
+
+          # Get function name from stack outputs
+          FUNCTION_NAME=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.stack_name }} \
+            --region ${{ inputs.aws_region }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`LambdaFunctionName`].OutputValue' \
+            --output text)
+
+          if [ -z "${FUNCTION_NAME}" ] || [ "${FUNCTION_NAME}" == "None" ]; then
+            echo "⚠️  Could not get function name from stack outputs, trying direct lookup..."
+            FUNCTION_NAME="${{ inputs.function_name }}"
+          fi
+
+          echo "Function Name: ${FUNCTION_NAME}"
+
+          # Get function configuration
+          aws lambda get-function-configuration \
+            --function-name ${FUNCTION_NAME} \
+            --region ${{ inputs.aws_region }} \
+            --query '{Runtime:Runtime,LastModified:LastModified,CodeSize:CodeSize,State:State,Version:Version}' \
+            --output table
+
+          # Set outputs for smoke-test job
+          echo "stack_name=${{ env.stack_name }}" >> $GITHUB_OUTPUT
+          echo "function_name=${FUNCTION_NAME}" >> $GITHUB_OUTPUT
+
+          echo "✅ Deployment verified"
+
+  smoke-test:
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions-smoke-test-${{ github.run_id }}
+
+      - name: Run smoke test
+        run: |
+          echo "=== Running Smoke Test ==="
+
+          # Use function name from deploy job output if available
+          if [ -n "${{ needs.deploy.outputs.function_name }}" ]; then
+            FUNCTION_NAME="${{ needs.deploy.outputs.function_name }}"
+          elif [ -n "${{ needs.deploy.outputs.stack_name }}" ]; then
+            # Fallback: get from stack
+            FUNCTION_NAME=$(aws cloudformation describe-stacks \
+              --stack-name ${{ needs.deploy.outputs.stack_name }} \
+              --region ${{ inputs.aws_region }} \
+              --query 'Stacks[0].Outputs[?OutputKey==`LambdaFunctionName`].OutputValue' \
+              --output text)
+          fi
+
+          if [ -z "${FUNCTION_NAME}" ] || [ "${FUNCTION_NAME}" == "None" ]; then
+            echo "⚠️  Could not get function name from stack, using input name"
+            FUNCTION_NAME="${{ inputs.function_name }}"
+          fi
+
+          echo "Testing function: ${FUNCTION_NAME}"
+
+          # Test 1: Simple invocation
+          echo ""
+          echo "Test 1: Simple invocation"
+          aws lambda invoke \
+            --function-name ${FUNCTION_NAME} \
+            --cli-binary-format raw-in-base64-out \
+            --payload '{"message": "GitHub Actions deployment test"}' \
+            --region ${{ inputs.aws_region }} \
+            response.json
+
+          echo "Response:"
+          cat response.json | jq . 2>/dev/null || cat response.json
+
+          # Check for errors
+          if grep -q "errorMessage" response.json; then
+            echo "❌ Smoke test failed - function returned error"
+            cat response.json
+            exit 1
+          fi
+
+          # Verify response structure
+          if grep -q '"statusCode": 200' response.json || grep -q '"success": true' response.json; then
+            echo "✅ Test 1 passed - function returned success"
+          else
+            echo "⚠️  Test 1 - function returned response (may or may not indicate success)"
+          fi
+
+          echo ""
+          echo "=== Smoke Test Summary ==="
+          echo "Function: ${FUNCTION_NAME}"
+          echo "Environment: ${{ inputs.environment }}"
+          echo "✅ Lambda invoked successfully - deployment validated!"

@@ -1,0 +1,101 @@
+name: 'Upload Report to S3'
+description: 'Upload report files to CloudBot reporting S3 bucket (matches GitLab CI pattern)'
+author: 'CloudBot Team'
+
+inputs:
+  report_file:
+    description: 'Path to report file to upload'
+    required: true
+  report_type:
+    description: 'Type of report (flake8, mypy, bandit, checkov, etc.)'
+    required: true
+  project_name:
+    description: 'Project name (defaults to repository name)'
+    required: false
+  account_id:
+    description: 'Account ID for S3 path'
+    required: false
+  aws_region:
+    description: 'AWS region'
+    required: false
+    default: 'us-east-2'
+  kms_key_alias:
+    description: 'KMS key alias for encryption'
+    required: false
+    default: 'alias/CloudBotPipelineKey'
+
+outputs:
+  report_url:
+    description: 'S3 URL of uploaded report'
+    value: ${{ steps.upload.outputs.report_url }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Upload report to S3
+      id: upload
+      shell: bash
+      env:
+        AWS_REGION: ${{ inputs.aws_region }}
+      run: |
+        echo "=== Uploading Report to S3 ==="
+        
+        # Generate timestamp (matches GitLab format: YYYYMMDD-HHMMSS)
+        DATETIME=$(date +"%Y%m%d-%H%M%S")
+        
+        # Determine project name
+        if [ -n "${{ inputs.project_name }}" ]; then
+          PROJECT_NAME="${{ inputs.project_name }}"
+        else
+          PROJECT_NAME="${{ github.repository }}"
+          # Remove owner/ prefix if present
+          PROJECT_NAME="${PROJECT_NAME#*/}"
+        fi
+        
+        # Determine account ID
+        if [ -n "${{ inputs.account_id }}" ]; then
+          ACCOUNT_ID="${{ inputs.account_id }}"
+        else
+          # Try to extract from AWS identity if available
+          if command -v aws &> /dev/null; then
+            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "unknown")
+          else
+            ACCOUNT_ID="unknown"
+          fi
+        fi
+        
+        # Determine file extension from report file
+        REPORT_FILE="${{ inputs.report_file }}"
+        FILE_EXT="${REPORT_FILE##*.}"
+        
+        # S3 bucket and key (preserve original file extension)
+        REPORTS_BUCKET="cloudbot-reporting-v2"
+        REPORT_KEY="incoming/${ACCOUNT_ID}/${PROJECT_NAME}/${DATETIME}-${{ inputs.report_type }}.${FILE_EXT}"
+        
+        echo "Report File: ${{ inputs.report_file }}"
+        echo "Report Type: ${{ inputs.report_type }}"
+        echo "Project: ${PROJECT_NAME}"
+        echo "Account ID: ${ACCOUNT_ID}"
+        echo "S3 Bucket: ${REPORTS_BUCKET}"
+        echo "S3 Key: ${REPORT_KEY}"
+        
+        # Check if report file exists
+        if [ ! -f "${{ inputs.report_file }}" ]; then
+          echo "⚠️  Warning: Report file not found: ${{ inputs.report_file }}"
+          echo "Skipping S3 upload"
+          exit 0
+        fi
+        
+        # Upload to S3 with KMS encryption
+        if aws s3 cp "${{ inputs.report_file }}" "s3://${REPORTS_BUCKET}/${REPORT_KEY}" \
+          --sse aws:kms \
+          --sse-kms-key-id ${{ inputs.kms_key_alias }} \
+          --region ${AWS_REGION} 2>&1; then
+          echo "✅ Report uploaded successfully"
+          echo "S3 URL: s3://${REPORTS_BUCKET}/${REPORT_KEY}"
+          echo "report_url=s3://${REPORTS_BUCKET}/${REPORT_KEY}" >> $GITHUB_OUTPUT
+        else
+          echo "⚠️  Warning: Failed to upload report to S3 (continuing anyway)"
+          echo "This may be expected if AWS credentials are not configured"
+        fi
+

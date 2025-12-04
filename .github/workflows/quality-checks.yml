@@ -1,0 +1,334 @@
+name: Quality Checks
+
+on:
+  workflow_call:
+    inputs:
+      python_version:
+        description: 'Python version'
+        required: false
+        type: string
+        default: '3.12'
+      requirements_file:
+        description: 'Path to requirements.txt'
+        required: false
+        type: string
+        default: 'requirements.txt'
+      working_directory:
+        description: 'Working directory'
+        required: false
+        type: string
+        default: '.'
+      run_flake8:
+        description: 'Run flake8 linting'
+        required: false
+        type: boolean
+        default: true
+      run_mypy:
+        description: 'Run mypy type checking'
+        required: false
+        type: boolean
+        default: true
+      run_cfn_lint:
+        description: 'Run CloudFormation/SAM template linting'
+        required: false
+        type: boolean
+        default: true
+      upload_reports:
+        description: 'Upload reports to S3 (requires AWS credentials)'
+        required: false
+        type: boolean
+        default: false
+      account_id:
+        description: 'Account ID for S3 uploads'
+        required: false
+    secrets:
+      gitlab_api_token:
+        description: 'GitLab API token for private packages'
+        required: false
+      aws_role_arn:
+        description: 'AWS IAM role ARN for S3 uploads'
+        required: false
+      aws_account_id:
+        description: 'AWS Account ID'
+        required: false
+
+jobs:
+  flake8:
+    if: inputs.run_flake8
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          python -m pip install --upgrade pip
+          
+          if [ -f "${{ inputs.requirements_file }}" ]; then
+            # Handle GitLab private packages if token provided
+            if [ -n "${{ secrets.gitlab_api_token }}" ]; then
+              echo "Installing with GitLab private package access..."
+              pip install \
+                --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
+                -r ${{ inputs.requirements_file }}
+            else
+              pip install -r ${{ inputs.requirements_file }}
+            fi
+          fi
+          
+          # Install linting tools (matches GitLab CI)
+          pip install flake8 flake8-docstrings
+      
+      - name: Run flake8 (code)
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          echo "=== Running Flake8 (Code) ==="
+          # Matches GitLab: --format=pylint --extend-exclude=test*.py --extend-ignore=D
+          flake8 --format=pylint \
+            --extend-exclude=test*.py \
+            --extend-ignore=D \
+            --output-file=flakereport.txt \
+            --tee \
+            --exit-zero || exit 1
+      
+      - name: Run flake8 (tests)
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          echo "=== Running Flake8 (Tests) ==="
+          # Matches GitLab: excludes lambda files, focuses on test files
+          flake8 --format=pylint \
+            --extend-exclude=lambda*.py,app.py,models.py,routes/*.py,services/*.py,workers/*.py,apps/*.py \
+            --extend-ignore=D \
+            --output-file=flaketestreport.txt \
+            --tee \
+            --exit-zero || exit 1
+      
+      - name: Run flake8 (docs - code)
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          echo "=== Running Flake8 (Docs - Code) ==="
+          # Matches GitLab: --extend-ignore=E,F,W (only docstring checks)
+          flake8 --format=pylint \
+            --extend-exclude=test*.py \
+            --extend-ignore=E,F,W \
+            --output-file=flakedocsreport.txt \
+            --tee \
+            --exit-zero || exit 1
+      
+      - name: Run flake8 (docs - tests)
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          echo "=== Running Flake8 (Docs - Tests) ==="
+          flake8 --format=pylint \
+            --extend-exclude=lambda*.py,app.py,models.py,routes/*.py,services/*.py,workers/*.py,apps/*.py \
+            --extend-ignore=E,F,W \
+            --output-file=flakedocstestreport.txt \
+            --tee \
+            --exit-zero || exit 1
+      
+      - name: Configure AWS for S3 upload
+        if: inputs.upload_reports && secrets.aws_role_arn
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: us-east-2
+          role-session-name: github-actions-quality-checks
+      
+      - name: Upload flake8 reports to S3
+        if: inputs.upload_reports && secrets.aws_role_arn
+        run: |
+          DATETIME=$(date +"%Y%m%d-%H%M%S")
+          PROJECT_NAME="${{ github.repository }}"
+          PROJECT_NAME="${PROJECT_NAME#*/}"
+          ACCOUNT_ID="${{ inputs.account_id || secrets.aws_account_id }}"
+          REPORTS_BUCKET="cloudbot-reporting-v2"
+          
+          for report in flakereport flaketestreport flakedocsreport flakedocstestreport; do
+            if [ -f "${{ inputs.working_directory }}/${report}.txt" ]; then
+              echo "Uploading ${report}.txt to S3..."
+              aws s3 cp "${{ inputs.working_directory }}/${report}.txt" \
+                "s3://${REPORTS_BUCKET}/incoming/${ACCOUNT_ID}/${PROJECT_NAME}/${DATETIME}-${report}.txt" \
+                --sse aws:kms \
+                --sse-kms-key-id alias/CloudBotPipelineKey \
+                --region us-east-2 || echo "Warning: Failed to upload ${report}.txt"
+            fi
+          done
+        shell: bash
+      
+      - name: Upload reports as artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flake8-reports
+          path: |
+            ${{ inputs.working_directory }}/flakereport.txt
+            ${{ inputs.working_directory }}/flaketestreport.txt
+            ${{ inputs.working_directory }}/flakedocsreport.txt
+            ${{ inputs.working_directory }}/flakedocstestreport.txt
+          retention-days: 7
+
+  mypy:
+    if: inputs.run_mypy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          python -m pip install --upgrade pip
+          
+          if [ -f "${{ inputs.requirements_file }}" ]; then
+            # Handle GitLab private packages if token provided
+            if [ -n "${{ secrets.gitlab_api_token }}" ]; then
+              pip install \
+                --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
+                -r ${{ inputs.requirements_file }}
+            else
+              pip install -r ${{ inputs.requirements_file }}
+            fi
+          fi
+          
+          # Install mypy and type stubs (matches GitLab CI)
+          pip install awscli lxml mypy boto3-stubs types-PyMySQL types-beautifulsoup4 types-python-dateutil types-requests
+      
+      - name: Run mypy
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          echo "=== Running mypy ==="
+          # Matches GitLab: --exclude 'test_.*.py$' --install-types --non-interactive --strict
+          mypy . \
+            --exclude 'test_.*.py$' \
+            --install-types \
+            --non-interactive \
+            --strict \
+            --disallow-untyped-defs \
+            --disallow-incomplete-defs \
+            --ignore-missing-imports \
+            --show-column-numbers \
+            --explicit-package-bases \
+            --junit-xml mypy.xml \
+            --xml-report . || MYPY_EXIT_STATUS=$?
+          
+          echo "mypy exit status: ${MYPY_EXIT_STATUS:-0}"
+          # Don't fail on mypy errors (matches GitLab behavior)
+        continue-on-error: true
+      
+      - name: Configure AWS for S3 upload
+        if: inputs.upload_reports && secrets.aws_role_arn
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: us-east-2
+          role-session-name: github-actions-quality-checks
+      
+      - name: Upload mypy reports to S3
+        if: inputs.upload_reports && secrets.aws_role_arn && always()
+        run: |
+          DATETIME=$(date +"%Y%m%d-%H%M%S")
+          PROJECT_NAME="${{ github.repository }}"
+          PROJECT_NAME="${PROJECT_NAME#*/}"
+          ACCOUNT_ID="${{ inputs.account_id || secrets.aws_account_id }}"
+          REPORTS_BUCKET="cloudbot-reporting-v2"
+          
+          if [ -f "${{ inputs.working_directory }}/mypy.xml" ]; then
+            echo "Uploading mypy.xml to S3..."
+            aws s3 cp "${{ inputs.working_directory }}/mypy.xml" \
+              "s3://${REPORTS_BUCKET}/incoming/${ACCOUNT_ID}/${PROJECT_NAME}/${DATETIME}-mypy.xml" \
+              --sse aws:kms \
+              --sse-kms-key-id alias/CloudBotPipelineKey \
+              --region us-east-2 || echo "Warning: Failed to upload mypy.xml"
+          fi
+          
+          if [ -f "${{ inputs.working_directory }}/index.xml" ]; then
+            echo "Uploading index.xml to S3..."
+            aws s3 cp "${{ inputs.working_directory }}/index.xml" \
+              "s3://${REPORTS_BUCKET}/incoming/${ACCOUNT_ID}/${PROJECT_NAME}/${DATETIME}-mypycov.xml" \
+              --sse aws:kms \
+              --sse-kms-key-id alias/CloudBotPipelineKey \
+              --region us-east-2 || echo "Warning: Failed to upload index.xml"
+          fi
+        shell: bash
+      
+      - name: Upload reports as artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mypy-reports
+          path: |
+            ${{ inputs.working_directory }}/mypy.xml
+            ${{ inputs.working_directory }}/index.xml
+          retention-days: 7
+
+  cfn-lint:
+    if: inputs.run_cfn_lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install cfn-lint
+        run: |
+          echo "=== Installing cfn-lint ==="
+          pip install cfn-lint
+          cfn-lint --version
+      
+      - name: Find CloudFormation templates
+        id: find-templates
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          echo "=== Finding CloudFormation/SAM Templates ==="
+          
+          # Find all template files
+          TEMPLATES=$(find . -name "*.yml" -o -name "*.yaml" | grep -E "(template|cloudformation|sam)" | grep -v node_modules || true)
+          
+          if [ -z "${TEMPLATES}" ]; then
+            echo "No CloudFormation templates found"
+            echo "templates=" >> $GITHUB_OUTPUT
+          else
+            echo "Found templates:"
+            echo "${TEMPLATES}"
+            echo "templates<<EOF" >> $GITHUB_OUTPUT
+            echo "${TEMPLATES}" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Lint CloudFormation templates
+        if: steps.find-templates.outputs.templates != ''
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          echo "=== Linting CloudFormation Templates ==="
+          
+          # Read templates from output
+          echo "${{ steps.find-templates.outputs.templates }}" | while read -r template; do
+            if [ -n "${template}" ] && [ -f "${template}" ]; then
+              echo ""
+              echo "Linting: ${template}"
+              cfn-lint "${template}" || echo "⚠️  Issues found in ${template}"
+            fi
+          done
+        continue-on-error: true
+      
+      - name: Upload lint results as artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cfn-lint-results
+          path: ${{ inputs.working_directory }}
+          if-no-files-found: ignore
+          retention-days: 7
+

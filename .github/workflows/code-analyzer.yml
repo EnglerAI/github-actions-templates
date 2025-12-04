@@ -1,0 +1,123 @@
+name: Code Analyzer
+
+on:
+  workflow_call:
+    inputs:
+      account_id:
+        description: 'Account ID for S3 path'
+        required: false
+      project_name:
+        description: 'Project name (defaults to repository name)'
+        required: false
+      upload_reports:
+        description: 'Upload code archive to S3 (requires AWS credentials)'
+        required: false
+        type: boolean
+        default: false
+      aws_region:
+        description: 'AWS region'
+        required: false
+        type: string
+        default: 'us-east-2'
+      kms_key_alias:
+        description: 'KMS key alias for encryption'
+        required: false
+        type: string
+        default: 'alias/CloudBotPipelineKey'
+    secrets:
+      aws_role_arn:
+        description: 'AWS IAM role ARN for S3 uploads'
+        required: true
+      aws_account_id:
+        description: 'AWS Account ID'
+        required: false
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for git archive
+      
+      - name: Create code archive
+        id: archive
+        run: |
+          echo "=== Creating Code Archive ==="
+          
+          # Generate timestamp (matches GitLab format: YYYYMMDD-HHMMSS)
+          DATETIME=$(date +"%Y%m%d-%H%M%S")
+          
+          # Determine project name
+          if [ -n "${{ inputs.project_name }}" ]; then
+            PROJECT_NAME="${{ inputs.project_name }}"
+          else
+            PROJECT_NAME="${{ github.repository }}"
+            # Remove owner/ prefix if present
+            PROJECT_NAME="${PROJECT_NAME#*/}"
+          fi
+          
+          # Create archive (matches GitLab: git archive --format=tar.gz)
+          ARCHIVE_NAME="codeitem-${GITHUB_SHA}.tar.gz"
+          git archive --format=tar.gz --output="${ARCHIVE_NAME}" HEAD
+          
+          echo "Archive created: ${ARCHIVE_NAME}"
+          ls -lh "${ARCHIVE_NAME}"
+          
+          echo "archive_name=${ARCHIVE_NAME}" >> $GITHUB_OUTPUT
+          echo "project_name=${PROJECT_NAME}" >> $GITHUB_OUTPUT
+      
+      - name: Configure AWS for S3 upload
+        if: inputs.upload_reports && secrets.aws_role_arn
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions-code-analyzer
+      
+      - name: Upload code archive to S3
+        if: inputs.upload_reports && secrets.aws_role_arn
+        run: |
+          echo "=== Uploading Code Archive to S3 ==="
+          
+          # Determine account ID
+          if [ -n "${{ inputs.account_id }}" ]; then
+            ACCOUNT_ID="${{ inputs.account_id }}"
+          elif [ -n "${{ secrets.aws_account_id }}" ]; then
+            ACCOUNT_ID="${{ secrets.aws_account_id }}"
+          else
+            # Try to get from AWS identity
+            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          fi
+          
+          # S3 bucket and key (matches GitLab pattern)
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${{ inputs.aws_region }}-${ACCOUNT_ID}"
+          S3_KEY="codeitems/${ACCOUNT_ID}/${{ steps.archive.outputs.project_name }}/codeitem-${GITHUB_SHA}.tar.gz"
+          
+          echo "Bucket: ${ARTIFACTS_BUCKET}"
+          echo "Key: ${S3_KEY}"
+          echo "Project: ${{ steps.archive.outputs.project_name }}"
+          echo "Account ID: ${ACCOUNT_ID}"
+          
+          # Upload to S3 with KMS encryption
+          if aws s3 cp "${{ steps.archive.outputs.archive_name }}" "s3://${ARTIFACTS_BUCKET}/${S3_KEY}" \
+            --sse aws:kms \
+            --sse-kms-key-id ${{ inputs.kms_key_alias }} \
+            --region ${{ inputs.aws_region }} 2>&1; then
+            echo "✅ Code archive uploaded successfully"
+            echo "S3 URL: s3://${ARTIFACTS_BUCKET}/${S3_KEY}"
+          else
+            echo "⚠️  Warning: Failed to upload code archive to S3"
+            echo "This may be expected if AWS credentials are not configured"
+            exit 0  # Don't fail the job
+          fi
+      
+      - name: Upload archive as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-archive
+          path: ${{ steps.archive.outputs.archive_name }}
+          retention-days: 7
+

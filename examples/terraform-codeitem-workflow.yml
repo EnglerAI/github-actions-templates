@@ -1,0 +1,82 @@
+# Example: Terraform Infrastructure Workflow
+# This example shows how to use the reusable workflows for Terraform infrastructure
+# Copy this to your codeitem repo at: .github/workflows/infrastructure.yml
+
+name: Terraform Infrastructure Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - 'env/**'
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches:
+      - main
+      - 'env/**'
+    paths:
+      - 'terraform/**'
+
+# Prevent concurrent Terraform runs
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Step 1: Determine environment from branch
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      aws_role: ${{ steps.env.outputs.aws_role }}
+      state_bucket: ${{ steps.env.outputs.state_bucket }}
+      state_key: ${{ steps.env.outputs.state_key }}
+    steps:
+      - name: Determine environment
+        id: env
+        run: |
+          case "${{ github.ref_name }}" in
+            main)
+              echo "environment=prd" >> $GITHUB_OUTPUT
+              echo "aws_role=${{ secrets.AWS_ROLE_ARN_PRD }}" >> $GITHUB_OUTPUT
+              echo "state_bucket=${{ vars.TF_STATE_BUCKET_PRD }}" >> $GITHUB_OUTPUT
+              echo "state_key=${{ vars.TF_STATE_KEY_PRD }}" >> $GITHUB_OUTPUT
+              ;;
+            env/dev)
+              echo "environment=dev" >> $GITHUB_OUTPUT
+              echo "aws_role=${{ secrets.AWS_ROLE_ARN_DEV }}" >> $GITHUB_OUTPUT
+              echo "state_bucket=${{ vars.TF_STATE_BUCKET_DEV }}" >> $GITHUB_OUTPUT
+              echo "state_key=${{ vars.TF_STATE_KEY_DEV }}" >> $GITHUB_OUTPUT
+              ;;
+            env/qat)
+              echo "environment=qat" >> $GITHUB_OUTPUT
+              echo "aws_role=${{ secrets.AWS_ROLE_ARN_QAT }}" >> $GITHUB_OUTPUT
+              echo "state_bucket=${{ vars.TF_STATE_BUCKET_QAT }}" >> $GITHUB_OUTPUT
+              echo "state_key=${{ vars.TF_STATE_KEY_QAT }}" >> $GITHUB_OUTPUT
+              ;;
+            env/stg)
+              echo "environment=stg" >> $GITHUB_OUTPUT
+              echo "aws_role=${{ secrets.AWS_ROLE_ARN_STG }}" >> $GITHUB_OUTPUT
+              echo "state_bucket=${{ vars.TF_STATE_BUCKET_STG }}" >> $GITHUB_OUTPUT
+              echo "state_key=${{ vars.TF_STATE_KEY_STG }}" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+  # Step 2: Run Terraform workflow
+  terraform:
+    needs: [setup]
+    uses: your-org/github-actions-templates/.github/workflows/terraform-workflow.yml@main
+    with:
+      terraform_version: '1.12.2'
+      terraform_directory: 'terraform'
+      environment: ${{ needs.setup.outputs.environment }}
+      aws_region: us-east-2
+      state_bucket: ${{ needs.setup.outputs.state_bucket }}
+      state_key: ${{ needs.setup.outputs.state_key }}
+      state_table: 'terraform-state-lock'
+      auto_apply: false  # Use GitHub environment protection for manual approval
+    secrets:
+      aws_role_arn: ${{ needs.setup.outputs.aws_role }}
+

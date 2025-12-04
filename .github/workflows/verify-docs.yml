@@ -1,0 +1,60 @@
+name: Verify Documentation
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        description: 'Working directory'
+        required: false
+        type: string
+        default: '.'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install Node.js and markdownlint
+        run: |
+          echo "=== Installing markdownlint ==="
+          
+          # Install Node.js
+          curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+          apt-get install -y nodejs
+          
+          # Install markdownlint-cli globally (matches GitLab CI)
+          npm install -g markdownlint-cli
+          
+          # Verify installation
+          markdownlint --version
+      
+      - name: Verify README.md exists and is valid
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          echo "=== Verifying README.md ==="
+          
+          # Check if README.md exists
+          if [ ! -f "README.md" ]; then
+            echo "❌ ERROR: README.md not found"
+            exit 1
+          fi
+          
+          echo "✅ README.md exists"
+          
+          # Run markdownlint (matches GitLab CI)
+          echo "Running markdownlint..."
+          markdownlint README.md
+          
+          echo "✅ README.md is properly formatted"
+      
+      - name: Upload results as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-verification
+          path: ${{ inputs.working_directory }}/README.md
+          if-no-files-found: ignore
+          retention-days: 7
+

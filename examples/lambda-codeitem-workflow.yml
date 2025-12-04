@@ -1,0 +1,166 @@
+# Example: Complete Lambda Codeitem Workflow with Quality & Security Checks
+# This example shows how to use all reusable workflows for a Lambda function codeitem
+# Copy this to your codeitem repo at: .github/workflows/deploy.yml
+#
+# Required GitHub Secrets:
+#   - AWS_ROLE_ARN_DEV, AWS_ROLE_ARN_PRD (and QAT/STG if needed)
+#   - AWS_ACCOUNT_ID_DEV, AWS_ACCOUNT_ID_PRD (and QAT/STG if needed)
+#   - GITLAB_API_TOKEN (optional, for private packages)
+
+name: Lambda CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - 'env/**'
+  pull_request:
+    branches:
+      - main
+      - 'env/**'
+
+jobs:
+  # Step 1: Determine environment from branch
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      aws_role: ${{ steps.env.outputs.aws_role }}
+      aws_account_id: ${{ steps.env.outputs.aws_account_id }}
+      deploy_allowed: ${{ steps.env.outputs.deploy_allowed }}
+      stack_name: ${{ steps.env.outputs.stack_name }}
+    steps:
+      - name: Determine environment
+        id: env
+        run: |
+          # For pull requests, use base branch
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BRANCH="${{ github.base_ref }}"
+            DEPLOY_ALLOWED="false"
+          else
+            BRANCH="${{ github.ref_name }}"
+            DEPLOY_ALLOWED="true"
+          fi
+          
+          case "${BRANCH}" in
+            main)
+              echo "environment=prd" >> $GITHUB_OUTPUT
+              echo "aws_role=${{ secrets.AWS_ROLE_ARN_PRD }}" >> $GITHUB_OUTPUT
+              echo "aws_account_id=${{ secrets.AWS_ACCOUNT_ID_PRD }}" >> $GITHUB_OUTPUT
+              echo "deploy_allowed=${DEPLOY_ALLOWED}" >> $GITHUB_OUTPUT
+              echo "stack_name=my-lambda-function-stack" >> $GITHUB_OUTPUT
+              ;;
+            env/dev)
+              echo "environment=dev" >> $GITHUB_OUTPUT
+              echo "aws_role=${{ secrets.AWS_ROLE_ARN_DEV }}" >> $GITHUB_OUTPUT
+              echo "aws_account_id=${{ secrets.AWS_ACCOUNT_ID_DEV }}" >> $GITHUB_OUTPUT
+              echo "deploy_allowed=${DEPLOY_ALLOWED}" >> $GITHUB_OUTPUT
+              echo "stack_name=my-lambda-function-stack" >> $GITHUB_OUTPUT
+              ;;
+            env/qat)
+              echo "environment=qat" >> $GITHUB_OUTPUT
+              echo "aws_role=${{ secrets.AWS_ROLE_ARN_QAT }}" >> $GITHUB_OUTPUT
+              echo "aws_account_id=${{ secrets.AWS_ACCOUNT_ID_QAT }}" >> $GITHUB_OUTPUT
+              echo "deploy_allowed=${DEPLOY_ALLOWED}" >> $GITHUB_OUTPUT
+              echo "stack_name=my-lambda-function-stack" >> $GITHUB_OUTPUT
+              ;;
+            env/stg)
+              echo "environment=stg" >> $GITHUB_OUTPUT
+              echo "aws_role=${{ secrets.AWS_ROLE_ARN_STG }}" >> $GITHUB_OUTPUT
+              echo "aws_account_id=${{ secrets.AWS_ACCOUNT_ID_STG }}" >> $GITHUB_OUTPUT
+              echo "deploy_allowed=${DEPLOY_ALLOWED}" >> $GITHUB_OUTPUT
+              echo "stack_name=my-lambda-function-stack" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "environment=dev" >> $GITHUB_OUTPUT
+              echo "aws_role=${{ secrets.AWS_ROLE_ARN_DEV }}" >> $GITHUB_OUTPUT
+              echo "aws_account_id=${{ secrets.AWS_ACCOUNT_ID_DEV }}" >> $GITHUB_OUTPUT
+              echo "deploy_allowed=false" >> $GITHUB_OUTPUT
+              echo "stack_name=" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+  # Step 2: Verify documentation
+  verify-docs:
+    uses: your-org/github-actions-templates/.github/workflows/verify-docs.yml@main
+
+  # Step 3: Quality checks (linting, type checking, template validation)
+  quality:
+    uses: your-org/github-actions-templates/.github/workflows/quality-checks.yml@main
+    with:
+      python_version: '3.12'
+      run_flake8: true
+      run_mypy: true
+      run_cfn_lint: true
+      upload_reports: ${{ needs.setup.outputs.deploy_allowed == 'true' }}
+      account_id: ${{ needs.setup.outputs.aws_account_id }}
+    secrets:
+      gitlab_api_token: ${{ secrets.GITLAB_API_TOKEN }}
+      aws_role_arn: ${{ needs.setup.outputs.aws_role }}
+      aws_account_id: ${{ needs.setup.outputs.aws_account_id }}
+
+  # Step 4: Security scans
+  security:
+    uses: your-org/github-actions-templates/.github/workflows/security-scans.yml@main
+    with:
+      python_version: '3.12'
+      run_bandit: true
+      run_checkov: true
+      run_radon: false  # Optional complexity analysis
+      upload_reports: ${{ needs.setup.outputs.deploy_allowed == 'true' }}
+      account_id: ${{ needs.setup.outputs.aws_account_id }}
+    secrets:
+      gitlab_api_token: ${{ secrets.GITLAB_API_TOKEN }}
+      aws_role_arn: ${{ needs.setup.outputs.aws_role }}
+      aws_account_id: ${{ needs.setup.outputs.aws_account_id }}
+
+  # Step 5: Run Python tests with coverage
+  test:
+    uses: your-org/github-actions-templates/.github/workflows/python-test.yml@main
+    with:
+      python_version: '3.12'
+      run_security_scan: false  # Already done in security job
+      run_complexity_scan: false  # Already done in security job if enabled
+      coverage_threshold: 80
+      upload_reports: ${{ needs.setup.outputs.deploy_allowed == 'true' }}
+      account_id: ${{ needs.setup.outputs.aws_account_id }}
+    secrets:
+      gitlab_api_token: ${{ secrets.GITLAB_API_TOKEN }}
+      aws_role_arn: ${{ needs.setup.outputs.aws_role }}
+      aws_account_id: ${{ needs.setup.outputs.aws_account_id }}
+
+  # Step 6: Code analyzer (upload code archive to S3 for CloudBot analysis)
+  code-analyzer:
+    if: needs.setup.outputs.deploy_allowed == 'true'
+    uses: your-org/github-actions-templates/.github/workflows/code-analyzer.yml@main
+    with:
+      account_id: ${{ needs.setup.outputs.aws_account_id }}
+      upload_reports: true
+    secrets:
+      aws_role_arn: ${{ needs.setup.outputs.aws_role }}
+      aws_account_id: ${{ needs.setup.outputs.aws_account_id }}
+
+  # Step 7: Deploy Lambda (only on allowed branches)
+  deploy:
+    needs: [setup, verify-docs, quality, security, test]
+    if: |
+      always() &&
+      needs.setup.outputs.deploy_allowed == 'true' &&
+      (needs.quality.result == 'success' || needs.quality.result == 'skipped') &&
+      (needs.security.result == 'success' || needs.security.result == 'skipped') &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped')
+    uses: your-org/github-actions-templates/.github/workflows/lambda-deploy.yml@main
+    with:
+      function_name: my-lambda-function
+      stack_name: ${{ needs.setup.outputs.stack_name }}
+      environment: ${{ needs.setup.outputs.environment }}
+      aws_region: us-east-2
+      python_version: '3.12'
+      sam_template: template.yml
+      run_tests: false  # Already ran in test job
+      verify_s3_permissions: true
+    secrets:
+      aws_role_arn: ${{ needs.setup.outputs.aws_role }}
+      aws_account_id: ${{ needs.setup.outputs.aws_account_id }}
+      gitlab_api_token: ${{ secrets.GITLAB_API_TOKEN }}
+

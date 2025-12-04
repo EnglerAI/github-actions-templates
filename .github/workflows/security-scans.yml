@@ -1,0 +1,275 @@
+name: Security Scans
+
+on:
+  workflow_call:
+    inputs:
+      python_version:
+        description: 'Python version'
+        required: false
+        type: string
+        default: '3.12'
+      requirements_file:
+        description: 'Path to requirements.txt'
+        required: false
+        type: string
+        default: 'requirements.txt'
+      working_directory:
+        description: 'Working directory'
+        required: false
+        type: string
+        default: '.'
+      run_bandit:
+        description: 'Run bandit security scan'
+        required: false
+        type: boolean
+        default: true
+      run_checkov:
+        description: 'Run checkov infrastructure security scan'
+        required: false
+        type: boolean
+        default: true
+      run_radon:
+        description: 'Run radon complexity analysis'
+        required: false
+        type: boolean
+        default: false
+      upload_reports:
+        description: 'Upload reports to S3 (requires AWS credentials)'
+        required: false
+        type: boolean
+        default: false
+      account_id:
+        description: 'Account ID for S3 uploads'
+        required: false
+    secrets:
+      gitlab_api_token:
+        description: 'GitLab API token for private packages'
+        required: false
+      aws_role_arn:
+        description: 'AWS IAM role ARN for S3 uploads'
+        required: false
+      aws_account_id:
+        description: 'AWS Account ID'
+        required: false
+
+jobs:
+  bandit:
+    if: inputs.run_bandit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          python -m pip install --upgrade pip
+          
+          if [ -f "${{ inputs.requirements_file }}" ]; then
+            # Handle GitLab private packages if token provided
+            if [ -n "${{ secrets.gitlab_api_token }}" ]; then
+              pip install \
+                --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
+                -r ${{ inputs.requirements_file }}
+            else
+              pip install -r ${{ inputs.requirements_file }}
+            fi
+          fi
+          
+          # Install bandit (matches GitLab CI)
+          pip install --no-cache-dir --upgrade awscli bandit
+      
+      - name: Run bandit security scan
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          echo "=== Running Bandit Security Scan ==="
+          # Matches GitLab: -r . -x /tests -f xml -o bandit.xml --exit-zero
+          bandit -r . -x /tests -f xml -o bandit.xml --exit-zero || exit 1
+      
+      - name: Configure AWS for S3 upload
+        if: inputs.upload_reports && secrets.aws_role_arn
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: us-east-2
+          role-session-name: github-actions-security-scans
+      
+      - name: Upload bandit report to S3
+        if: inputs.upload_reports && secrets.aws_role_arn
+        run: |
+          DATETIME=$(date +"%Y%m%d-%H%M%S")
+          PROJECT_NAME="${{ github.repository }}"
+          PROJECT_NAME="${PROJECT_NAME#*/}"
+          ACCOUNT_ID="${{ inputs.account_id || secrets.aws_account_id }}"
+          REPORTS_BUCKET="cloudbot-reporting-v2"
+          
+          if [ -f "${{ inputs.working_directory }}/bandit.xml" ]; then
+            echo "Uploading bandit.xml to S3..."
+            aws s3 cp "${{ inputs.working_directory }}/bandit.xml" \
+              "s3://${REPORTS_BUCKET}/incoming/${ACCOUNT_ID}/${PROJECT_NAME}/${DATETIME}-bandit.xml" \
+              --sse aws:kms \
+              --sse-kms-key-id alias/CloudBotPipelineKey \
+              --region us-east-2 || echo "Warning: Failed to upload bandit.xml"
+          fi
+        shell: bash
+      
+      - name: Upload report as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: ${{ inputs.working_directory }}/bandit.xml
+          retention-days: 7
+
+  checkov:
+    if: inputs.run_checkov
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install checkov
+        run: |
+          echo "=== Installing checkov ==="
+          # Install checkov using pip (avoids GLIBC compatibility issues)
+          pip3 install --upgrade pip
+          pip3 install checkov
+          
+          # Verify installation
+          checkov --version || (echo "Error: checkov installation failed" && exit 1)
+          echo "✅ checkov successfully installed"
+      
+      - name: Run checkov security scan
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          echo "=== Running Checkov Security Scan ==="
+          # Matches GitLab: --skip-check with same checks, --soft-fail, -o cli -o junitxml
+          checkov --directory . \
+            --skip-check CKV2_AWS_5,CKV2_AWS_29,CKV2_AWS_51,CKV2_AWS_53,CKV_AWS_76,CKV_AWS_115,CKV_AWS_119,CKV_AWS_120,CKV_AWS_158,CKV_AWS_173,CKV_AWS_225,CKV_AWS_237,CKV_AWS_338,CKV_TF_1,CKV_GITLABCI_2 \
+            --soft-fail \
+            -o cli \
+            -o junitxml \
+            --output-file-path console,checkov.xml || exit 1
+      
+      - name: Configure AWS for S3 upload
+        if: inputs.upload_reports && secrets.aws_role_arn
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: us-east-2
+          role-session-name: github-actions-security-scans
+      
+      - name: Upload checkov report to S3
+        if: inputs.upload_reports && secrets.aws_role_arn
+        run: |
+          DATETIME=$(date +"%Y%m%d-%H%M%S")
+          PROJECT_NAME="${{ github.repository }}"
+          PROJECT_NAME="${PROJECT_NAME#*/}"
+          ACCOUNT_ID="${{ inputs.account_id || secrets.aws_account_id }}"
+          REPORTS_BUCKET="cloudbot-reporting-v2"
+          
+          if [ -f "${{ inputs.working_directory }}/checkov.xml" ]; then
+            echo "Uploading checkov.xml to S3..."
+            aws s3 cp "${{ inputs.working_directory }}/checkov.xml" \
+              "s3://${REPORTS_BUCKET}/incoming/${ACCOUNT_ID}/${PROJECT_NAME}/${DATETIME}-checkov.xml" \
+              --sse aws:kms \
+              --sse-kms-key-id alias/CloudBotPipelineKey \
+              --region us-east-2 || echo "Warning: Failed to upload checkov.xml"
+          fi
+        shell: bash
+      
+      - name: Upload report as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-report
+          path: ${{ inputs.working_directory }}/checkov.xml
+          retention-days: 7
+
+  radon:
+    if: inputs.run_radon
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          python -m pip install --upgrade pip
+          
+          if [ -f "${{ inputs.requirements_file }}" ]; then
+            # Handle GitLab private packages if token provided
+            if [ -n "${{ secrets.gitlab_api_token }}" ]; then
+              pip install \
+                --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
+                -r ${{ inputs.requirements_file }}
+            else
+              pip install -r ${{ inputs.requirements_file }}
+            fi
+          fi
+          
+          # Install radon and awscli (matches GitLab CI)
+          pip install --no-cache-dir --upgrade awscli radon
+      
+      - name: Run radon complexity analysis
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          echo "=== Running Radon Complexity Analysis ==="
+          # Matches GitLab: -i "tests" . -s
+          radon cc -i "tests" . -s --xml -O radon-cc.xml || exit 1
+          radon mi -i "tests" . -s -j -O radon-mi.json || exit 1
+          radon raw -i "tests" . -j -O radon-raw.json || exit 1
+      
+      - name: Configure AWS for S3 upload
+        if: inputs.upload_reports && secrets.aws_role_arn
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: us-east-2
+          role-session-name: github-actions-security-scans
+      
+      - name: Upload radon reports to S3
+        if: inputs.upload_reports && secrets.aws_role_arn
+        run: |
+          DATETIME=$(date +"%Y%m%d-%H%M%S")
+          PROJECT_NAME="${{ github.repository }}"
+          PROJECT_NAME="${PROJECT_NAME#*/}"
+          ACCOUNT_ID="${{ inputs.account_id || secrets.aws_account_id }}"
+          REPORTS_BUCKET="cloudbot-reporting-v2"
+          
+          for report in radon-cc.xml radon-mi.json radon-raw.json; do
+            if [ -f "${{ inputs.working_directory }}/${report}" ]; then
+              echo "Uploading ${report} to S3..."
+              aws s3 cp "${{ inputs.working_directory }}/${report}" \
+                "s3://${REPORTS_BUCKET}/incoming/${ACCOUNT_ID}/${PROJECT_NAME}/${DATETIME}-${report}" \
+                --sse aws:kms \
+                --sse-kms-key-id alias/CloudBotPipelineKey \
+                --region us-east-2 || echo "Warning: Failed to upload ${report}"
+            fi
+          done
+        shell: bash
+      
+      - name: Upload reports as artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: radon-reports
+          path: |
+            ${{ inputs.working_directory }}/radon-cc.xml
+            ${{ inputs.working_directory }}/radon-mi.json
+            ${{ inputs.working_directory }}/radon-raw.json
+          retention-days: 7
+

@@ -1,0 +1,65 @@
+# GitHub Actions Templates - .gitignore
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# macOS Thumbnails
+._*
+
+# macOS Directories
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# Temporary files
+*.log
+*.tmp
+*.bak
+*.cache
+
+# Test artifacts
+*.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.mypy_cache/
+
+# Local testing
+test-results/
+artifacts/
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+

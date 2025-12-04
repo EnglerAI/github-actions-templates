@@ -1,0 +1,104 @@
+name: 'Determine Environment'
+description: 'Determine target environment and AWS role from branch name (matches GitLab CI pattern)'
+author: 'CloudBot Team'
+
+inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  environment:
+    description: 'Target environment (dev/qat/stg/prd)'
+    value: ${{ steps.determine.outputs.environment }}
+  aws_role:
+    description: 'AWS IAM role ARN for environment'
+    value: ${{ steps.determine.outputs.aws_role }}
+  deploy_allowed:
+    description: 'Whether deployment is allowed for this branch'
+    value: ${{ steps.determine.outputs.deploy_allowed }}
+  is_production:
+    description: 'Whether this is production environment'
+    value: ${{ steps.determine.outputs.is_production }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Determine environment from branch
+      id: determine
+      shell: bash
+      env:
+        BRANCH_NAME: ${{ github.ref_name }}
+        EVENT_NAME: ${{ github.event_name }}
+        BASE_REF: ${{ github.base_ref }}
+      run: |
+        echo "=== Environment Determination ==="
+        echo "Branch: ${BRANCH_NAME}"
+        echo "Event: ${EVENT_NAME}"
+        echo "Base ref: ${BASE_REF}"
+        
+        # For pull requests, use base branch (target)
+        if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+          BRANCH="${BASE_REF}"
+          echo "Pull request detected, using base branch: ${BRANCH}"
+        else
+          BRANCH="${BRANCH_NAME}"
+        fi
+        
+        # Determine environment based on branch (matches GitLab CI pattern)
+        case "${BRANCH}" in
+          main)
+            ENVIRONMENT="prd"
+            AWS_ROLE_VAR="AWS_ROLE_ARN_PRD"
+            DEPLOY_ALLOWED="true"
+            IS_PRODUCTION="true"
+            ;;
+          env/dev)
+            ENVIRONMENT="dev"
+            AWS_ROLE_VAR="AWS_ROLE_ARN_DEV"
+            DEPLOY_ALLOWED="true"
+            IS_PRODUCTION="false"
+            ;;
+          env/qat)
+            ENVIRONMENT="qat"
+            AWS_ROLE_VAR="AWS_ROLE_ARN_QAT"
+            DEPLOY_ALLOWED="true"
+            IS_PRODUCTION="false"
+            ;;
+          env/stg)
+            ENVIRONMENT="stg"
+            AWS_ROLE_VAR="AWS_ROLE_ARN_STG"
+            DEPLOY_ALLOWED="true"
+            IS_PRODUCTION="false"
+            ;;
+          feature/*|bugfix/*|hotfix/*)
+            ENVIRONMENT="dev"
+            AWS_ROLE_VAR="AWS_ROLE_ARN_DEV"
+            DEPLOY_ALLOWED="false"
+            IS_PRODUCTION="false"
+            echo "⚠️  Feature/bugfix/hotfix branch - deployment not allowed"
+            ;;
+          *)
+            ENVIRONMENT="unknown"
+            AWS_ROLE_VAR=""
+            DEPLOY_ALLOWED="false"
+            IS_PRODUCTION="false"
+            echo "⚠️  Unknown branch pattern: ${BRANCH}"
+            ;;
+        esac
+        
+        echo "Environment: ${ENVIRONMENT}"
+        echo "AWS Role Variable: ${AWS_ROLE_VAR}"
+        echo "Deploy Allowed: ${DEPLOY_ALLOWED}"
+        echo "Is Production: ${IS_PRODUCTION}"
+        
+        # Set outputs
+        echo "environment=${ENVIRONMENT}" >> $GITHUB_OUTPUT
+        echo "aws_role_var=${AWS_ROLE_VAR}" >> $GITHUB_OUTPUT
+        echo "deploy_allowed=${DEPLOY_ALLOWED}" >> $GITHUB_OUTPUT
+        echo "is_production=${IS_PRODUCTION}" >> $GITHUB_OUTPUT
+        
+        # Note: Actual AWS role ARN must be passed from secrets in calling workflow
+        # We output the variable name so caller knows which secret to use
+
