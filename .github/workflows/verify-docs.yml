@@ -16,13 +16,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: Install Node.js and markdownlint
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install markdownlint
         run: |
           echo "=== Installing markdownlint ==="
-          
-          # Install Node.js
-          curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-          apt-get install -y nodejs
           
           # Install markdownlint-cli globally (matches GitLab CI)
           npm install -g markdownlint-cli
