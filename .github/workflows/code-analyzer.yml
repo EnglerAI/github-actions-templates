@@ -10,6 +10,7 @@ on:
       project_name:
         description: 'Project name (defaults to repository name)'
         required: false
+        type: string
       upload_reports:
         description: 'Upload code archive to S3 (requires AWS credentials)'
         required: false
