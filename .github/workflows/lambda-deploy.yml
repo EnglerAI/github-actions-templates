@@ -166,6 +166,9 @@ jobs:
 
   deploy:
     needs: [package]
+    if: |
+      always() && 
+      (needs.package.result == 'success')
     runs-on: ubuntu-latest
     outputs:
       stack_name: ${{ steps.deploy.outputs.stack_name }}
@@ -178,6 +181,18 @@ jobs:
       contents: read
 
     steps:
+      - name: Debug - Check job context
+        run: |
+          echo "=== Deploy Job Debug Info ==="
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Function Name: ${{ inputs.function_name }}"
+          echo "Stack Name: ${{ inputs.stack_name }}"
+          echo "AWS Region: ${{ inputs.aws_region }}"
+          echo "Package Job Result: ${{ needs.package.result }}"
+          echo "GitHub Event: ${{ github.event_name }}"
+          echo "GitHub Ref: ${{ github.ref }}"
+          echo "Run ID: ${{ github.run_id }}"
+      
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -374,6 +389,9 @@ jobs:
 
   smoke-test:
     needs: [deploy]
+    if: |
+      always() && 
+      (needs.deploy.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       id-token: write
