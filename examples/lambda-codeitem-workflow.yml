@@ -1,166 +1,225 @@
-# Example: Complete Lambda Codeitem Workflow with Quality & Security Checks
-# This example shows how to use all reusable workflows for a Lambda function codeitem
-# Copy this to your codeitem repo at: .github/workflows/deploy.yml
+# Example: Complete Lambda Codeitem Workflow
 #
-# Required GitHub Secrets:
-#   - AWS_ROLE_ARN_DEV, AWS_ROLE_ARN_PRD (and QAT/STG if needed)
-#   - AWS_ACCOUNT_ID_DEV, AWS_ACCOUNT_ID_PRD (and QAT/STG if needed)
-#   - GITLAB_API_TOKEN (optional, for private packages)
+# This is a complete example workflow that demonstrates how to use all the
+# reusable workflow templates for a Lambda function codeitem.
+#
+# SETUP INSTRUCTIONS:
+# 1. Copy this file to your codeitem repository as: .github/workflows/deploy.yml
+# 2. Replace all placeholders (YOUR_CODEITEM_NAME, YOUR_STACK_NAME, etc.)
+# 3. Configure your GitHub repository secrets (see SECRETS section below)
+# 4. Create GitHub Environments: dev, prd (Settings → Environments)
+# 5. Customize branch names and environment mapping if needed
+#
+# SECRETS REQUIRED:
+# - AWS_ROLE_ARN_DEV: IAM role ARN for dev environment (e.g., arn:aws:iam::123456789012:role/github-oidc-role)
+# - AWS_ACCOUNT_ID_DEV: AWS account ID for dev environment
+# - AWS_ROLE_ARN_PRD: IAM role ARN for production environment
+# - AWS_ACCOUNT_ID_PRD: AWS account ID for production environment
+#
+# ENVIRONMENTS REQUIRED:
+# - dev: For development deployments (from env/dev branch)
+# - prd: For production deployments (from main branch)
+#
+# CUSTOMIZATION POINTS:
+# - Line 1: Workflow name
+# - Lines 6-7: Branch names for push triggers
+# - Lines 10-11: Branch names for PR triggers
+# - Lines 41-52: Environment mapping (branch → environment)
+# - Line 45, 51: Stack name (CloudFormation stack name)
+# - Line 84: Python version
+# - Line 85-87: Quality check toggles
+# - Line 101-104: Security scan toggles
+# - Line 124: Coverage threshold (0 = no threshold)
+# - Line 160: Lambda function name
+# - Line 163: AWS region
+# - Line 164: Python version
+# - Line 165: SAM template path
+# - Line 168: KMS key alias for S3 encryption
 
-name: Lambda CI/CD Pipeline
+name: Deploy YOUR_CODEITEM_NAME
 
 on:
   push:
     branches:
-      - main
-      - 'env/**'
+      - main # Production
+      - env/dev # Development
+      # Add more branches as needed: env/qat, env/stg, etc.
   pull_request:
     branches:
       - main
-      - 'env/**'
+      - env/dev
+      # Add more branches as needed
 
 jobs:
   # Step 1: Determine environment from branch
+  # This job maps branch names to environments and determines if deployment is allowed.
+  # CUSTOMIZE: Branch names, environment names, and stack names
   setup:
     runs-on: ubuntu-latest
     outputs:
       environment: ${{ steps.env.outputs.environment }}
-      aws_role: ${{ steps.env.outputs.aws_role }}
-      aws_account_id: ${{ steps.env.outputs.aws_account_id }}
       deploy_allowed: ${{ steps.env.outputs.deploy_allowed }}
       stack_name: ${{ steps.env.outputs.stack_name }}
     steps:
       - name: Determine environment
         id: env
         run: |
+          echo "=== Environment Determination ==="
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Event: ${{ github.event_name }}"
+
           # For pull requests, use base branch
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             BRANCH="${{ github.base_ref }}"
             DEPLOY_ALLOWED="false"
+            echo "Pull request detected, target branch: ${BRANCH}"
           else
             BRANCH="${{ github.ref_name }}"
             DEPLOY_ALLOWED="true"
           fi
-          
+
+          # Route to environment based on branch
+          # CUSTOMIZE: Add more branches/environments as needed
           case "${BRANCH}" in
             main)
-              echo "environment=prd" >> $GITHUB_OUTPUT
-              echo "aws_role=${{ secrets.AWS_ROLE_ARN_PRD }}" >> $GITHUB_OUTPUT
-              echo "aws_account_id=${{ secrets.AWS_ACCOUNT_ID_PRD }}" >> $GITHUB_OUTPUT
-              echo "deploy_allowed=${DEPLOY_ALLOWED}" >> $GITHUB_OUTPUT
-              echo "stack_name=my-lambda-function-stack" >> $GITHUB_OUTPUT
+              ENV="prd"
+              # Secrets are referenced directly (not passed through outputs)
+              STACK_NAME="YOUR_STACK_NAME"  # CUSTOMIZE: Your CloudFormation stack name
               ;;
             env/dev)
-              echo "environment=dev" >> $GITHUB_OUTPUT
-              echo "aws_role=${{ secrets.AWS_ROLE_ARN_DEV }}" >> $GITHUB_OUTPUT
-              echo "aws_account_id=${{ secrets.AWS_ACCOUNT_ID_DEV }}" >> $GITHUB_OUTPUT
-              echo "deploy_allowed=${DEPLOY_ALLOWED}" >> $GITHUB_OUTPUT
-              echo "stack_name=my-lambda-function-stack" >> $GITHUB_OUTPUT
+              ENV="dev"
+              STACK_NAME="YOUR_STACK_NAME"  # CUSTOMIZE: Your CloudFormation stack name
               ;;
-            env/qat)
-              echo "environment=qat" >> $GITHUB_OUTPUT
-              echo "aws_role=${{ secrets.AWS_ROLE_ARN_QAT }}" >> $GITHUB_OUTPUT
-              echo "aws_account_id=${{ secrets.AWS_ACCOUNT_ID_QAT }}" >> $GITHUB_OUTPUT
-              echo "deploy_allowed=${DEPLOY_ALLOWED}" >> $GITHUB_OUTPUT
-              echo "stack_name=my-lambda-function-stack" >> $GITHUB_OUTPUT
-              ;;
-            env/stg)
-              echo "environment=stg" >> $GITHUB_OUTPUT
-              echo "aws_role=${{ secrets.AWS_ROLE_ARN_STG }}" >> $GITHUB_OUTPUT
-              echo "aws_account_id=${{ secrets.AWS_ACCOUNT_ID_STG }}" >> $GITHUB_OUTPUT
-              echo "deploy_allowed=${DEPLOY_ALLOWED}" >> $GITHUB_OUTPUT
-              echo "stack_name=my-lambda-function-stack" >> $GITHUB_OUTPUT
-              ;;
+            # Add more environments as needed:
+            # env/qat)
+            #   ENV="qat"
+            #   STACK_NAME="YOUR_STACK_NAME"
+            #   ;;
+            # env/stg)
+            #   ENV="stg"
+            #   STACK_NAME="YOUR_STACK_NAME"
+            #   ;;
             *)
-              echo "environment=dev" >> $GITHUB_OUTPUT
-              echo "aws_role=${{ secrets.AWS_ROLE_ARN_DEV }}" >> $GITHUB_OUTPUT
-              echo "aws_account_id=${{ secrets.AWS_ACCOUNT_ID_DEV }}" >> $GITHUB_OUTPUT
-              echo "deploy_allowed=false" >> $GITHUB_OUTPUT
-              echo "stack_name=" >> $GITHUB_OUTPUT
+              ENV="unknown"
+              STACK_NAME=""
+              DEPLOY_ALLOWED="false"
+              echo "⚠️  Unknown branch: ${BRANCH}"
               ;;
           esac
 
+          echo "Environment: ${ENV}"
+          echo "Deploy Allowed: ${DEPLOY_ALLOWED}"
+          echo "Stack Name: ${STACK_NAME}"
+
+          # Set outputs (don't output secrets - they get masked!)
+          echo "environment=${ENV}" >> $GITHUB_OUTPUT
+          echo "deploy_allowed=${DEPLOY_ALLOWED}" >> $GITHUB_OUTPUT
+          echo "stack_name=${STACK_NAME}" >> $GITHUB_OUTPUT
+
   # Step 2: Verify documentation
+  # Validates that README.md exists and is properly formatted
   verify-docs:
-    uses: your-org/github-actions-templates/.github/workflows/verify-docs.yml@main
+    uses: bengler9/github-actions-templates/.github/workflows/verify-docs.yml@main
 
   # Step 3: Quality checks (linting, type checking, template validation)
+  # CUSTOMIZE: Enable/disable specific checks, set Python version
   quality:
-    uses: your-org/github-actions-templates/.github/workflows/quality-checks.yml@main
+    needs: [setup]
+    permissions:
+      id-token: write # Required for AWS OIDC authentication
+      contents: read
+    uses: bengler9/github-actions-templates/.github/workflows/quality-checks.yml@main
     with:
-      python_version: '3.12'
-      run_flake8: true
-      run_mypy: true
-      run_cfn_lint: true
+      python_version: "3.12"  # CUSTOMIZE: Your Python version
+      run_flake8: true         # CUSTOMIZE: Enable/disable flake8
+      run_mypy: true           # CUSTOMIZE: Enable/disable mypy
+      run_cfn_lint: true       # CUSTOMIZE: Enable/disable CloudFormation linting
       upload_reports: ${{ needs.setup.outputs.deploy_allowed == 'true' }}
-      account_id: ${{ needs.setup.outputs.aws_account_id }}
     secrets:
-      gitlab_api_token: ${{ secrets.GITLAB_API_TOKEN }}
-      aws_role_arn: ${{ needs.setup.outputs.aws_role }}
-      aws_account_id: ${{ needs.setup.outputs.aws_account_id }}
+      # IMPORTANT: Secrets cannot be passed through job outputs - reference directly
+      aws_role_arn: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_PRD }}
+      aws_account_id: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ACCOUNT_ID_DEV || secrets.AWS_ACCOUNT_ID_PRD }}
 
   # Step 4: Security scans
+  # CUSTOMIZE: Enable/disable specific security scans
   security:
-    uses: your-org/github-actions-templates/.github/workflows/security-scans.yml@main
+    needs: [setup]
+    permissions:
+      id-token: write # Required for AWS OIDC authentication
+      contents: read
+    uses: bengler9/github-actions-templates/.github/workflows/security-scans.yml@main
     with:
-      python_version: '3.12'
-      run_bandit: true
-      run_checkov: true
-      run_radon: false  # Optional complexity analysis
+      python_version: "3.12"  # CUSTOMIZE: Your Python version
+      run_bandit: true         # CUSTOMIZE: Enable/disable Bandit security scan
+      run_checkov: true        # CUSTOMIZE: Enable/disable Checkov IaC scan
+      run_radon: false         # CUSTOMIZE: Enable/disable Radon complexity analysis
       upload_reports: ${{ needs.setup.outputs.deploy_allowed == 'true' }}
-      account_id: ${{ needs.setup.outputs.aws_account_id }}
     secrets:
-      gitlab_api_token: ${{ secrets.GITLAB_API_TOKEN }}
-      aws_role_arn: ${{ needs.setup.outputs.aws_role }}
-      aws_account_id: ${{ needs.setup.outputs.aws_account_id }}
+      aws_role_arn: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_PRD }}
+      aws_account_id: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ACCOUNT_ID_DEV || secrets.AWS_ACCOUNT_ID_PRD }}
 
   # Step 5: Run Python tests with coverage
+  # CUSTOMIZE: Coverage threshold, enable/disable security/complexity scans
   test:
-    uses: your-org/github-actions-templates/.github/workflows/python-test.yml@main
+    needs: [setup]
+    permissions:
+      security-events: write # Required for uploading SARIF results
+      contents: read
+      id-token: write # Required for AWS OIDC
+      pull-requests: write # Required for commenting on PRs
+      issues: write # Required for commenting on PRs
+    uses: bengler9/github-actions-templates/.github/workflows/python-test.yml@main
     with:
-      python_version: '3.12'
-      run_security_scan: false  # Already done in security job
-      run_complexity_scan: false  # Already done in security job if enabled
-      coverage_threshold: 80
+      python_version: "3.12"  # CUSTOMIZE: Your Python version
+      run_security_scan: false # Already done in security job
+      run_complexity_scan: false # Already done in security job
+      coverage_threshold: 0     # CUSTOMIZE: Minimum coverage % (0 = no threshold)
       upload_reports: ${{ needs.setup.outputs.deploy_allowed == 'true' }}
-      account_id: ${{ needs.setup.outputs.aws_account_id }}
     secrets:
-      gitlab_api_token: ${{ secrets.GITLAB_API_TOKEN }}
-      aws_role_arn: ${{ needs.setup.outputs.aws_role }}
-      aws_account_id: ${{ needs.setup.outputs.aws_account_id }}
+      aws_role_arn: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_PRD }}
+      aws_account_id: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ACCOUNT_ID_DEV || secrets.AWS_ACCOUNT_ID_PRD }}
 
   # Step 6: Code analyzer (upload code archive to S3 for CloudBot analysis)
+  # Only runs on branches where deployment is allowed (not on PRs)
   code-analyzer:
+    needs: [setup]
     if: needs.setup.outputs.deploy_allowed == 'true'
-    uses: your-org/github-actions-templates/.github/workflows/code-analyzer.yml@main
+    permissions:
+      id-token: write # Required for AWS OIDC authentication
+      contents: read
+    uses: bengler9/github-actions-templates/.github/workflows/code-analyzer.yml@main
     with:
-      account_id: ${{ needs.setup.outputs.aws_account_id }}
       upload_reports: true
     secrets:
-      aws_role_arn: ${{ needs.setup.outputs.aws_role }}
-      aws_account_id: ${{ needs.setup.outputs.aws_account_id }}
+      aws_role_arn: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_PRD }}
+      aws_account_id: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ACCOUNT_ID_DEV || secrets.AWS_ACCOUNT_ID_PRD }}
 
   # Step 7: Deploy Lambda (only on allowed branches)
+  # CUSTOMIZE: Function name, region, SAM template path, KMS key
   deploy:
     needs: [setup, verify-docs, quality, security, test]
     if: |
       always() &&
       needs.setup.outputs.deploy_allowed == 'true' &&
+      github.event_name == 'push' &&
+      (needs.verify-docs.result == 'success' || needs.verify-docs.result == 'skipped') &&
       (needs.quality.result == 'success' || needs.quality.result == 'skipped') &&
       (needs.security.result == 'success' || needs.security.result == 'skipped') &&
       (needs.test.result == 'success' || needs.test.result == 'skipped')
-    uses: your-org/github-actions-templates/.github/workflows/lambda-deploy.yml@main
+    permissions:
+      id-token: write # Required for AWS OIDC authentication
+      contents: read
+    uses: bengler9/github-actions-templates/.github/workflows/lambda-deploy.yml@main
     with:
-      function_name: my-lambda-function
+      function_name: YOUR_FUNCTION_NAME  # CUSTOMIZE: Your Lambda function name
       stack_name: ${{ needs.setup.outputs.stack_name }}
       environment: ${{ needs.setup.outputs.environment }}
-      aws_region: us-east-2
-      python_version: '3.12'
-      sam_template: template.yml
-      run_tests: false  # Already ran in test job
-      verify_s3_permissions: true
+      aws_region: us-east-2              # CUSTOMIZE: Your AWS region
+      python_version: "3.12"            # CUSTOMIZE: Your Python version
+      sam_template: template.yml         # CUSTOMIZE: Path to your SAM template
+      run_tests: false                   # Already ran in test job
+      verify_s3_permissions: true        # Recommended: Verify S3 access before deploy
+      kms_key_alias: alias/CloudBotPipelineKey  # CUSTOMIZE: Your KMS key alias
     secrets:
-      aws_role_arn: ${{ needs.setup.outputs.aws_role }}
-      aws_account_id: ${{ needs.setup.outputs.aws_account_id }}
-      gitlab_api_token: ${{ secrets.GITLAB_API_TOKEN }}
-
+      aws_role_arn: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_PRD }}
+      aws_account_id: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ACCOUNT_ID_DEV || secrets.AWS_ACCOUNT_ID_PRD }}
