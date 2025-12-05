@@ -189,28 +189,55 @@ jobs:
           cache: 'pip'
       
       - name: Install dependencies
-        working-directory: ${{ inputs.working_directory }}
         run: |
           python -m pip install --upgrade pip
           
           # Install project dependencies from requirements.txt first
           # This ensures actual packages (like pymysql, requests, etc.) are installed
           # before we install type stubs, matching GitLab CI behavior
-          if [ -f "${{ inputs.requirements_file }}" ]; then
+          # Note: Resolve requirements_file path from repo root
+          REQ_FILE="${{ inputs.requirements_file }}"
+          
+          # If requirements_file path is relative to working_directory (starts with ../),
+          # resolve it relative to repo root instead
+          if [[ "$REQ_FILE" == ../* ]]; then
+            # Remove ../ prefix to get path from repo root
+            REQ_FILE="${REQ_FILE#../}"
+            echo "Resolved requirements file path: $REQ_FILE (from repo root)"
+          fi
+          
+          # Check if requirements file exists (from repo root)
+          echo "Looking for requirements file: $REQ_FILE"
+          if [ -f "$REQ_FILE" ]; then
+            echo "✅ Found requirements file: $REQ_FILE"
+            echo "Installing dependencies from: $REQ_FILE"
             # Handle GitLab private packages if token provided
             if [ -n "${{ secrets.gitlab_api_token }}" ]; then
               pip install \
                 --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
-                -r ${{ inputs.requirements_file }}
+                -r "$REQ_FILE"
             else
-              pip install -r ${{ inputs.requirements_file }}
+              pip install -r "$REQ_FILE"
             fi
+          else
+            echo "⚠️  Requirements file not found: $REQ_FILE"
+            echo "Current directory: $(pwd)"
+            echo "Listing files in repo root:"
+            ls -la || true
           fi
           
           # Install mypy and type stubs (matches GitLab CI exactly)
           # Note: Actual packages (pymysql, requests, etc.) should be in requirements.txt
           # Type stubs provide type information for mypy but require the actual packages
+          echo "Installing mypy and type stubs..."
           pip install awscli lxml mypy boto3-stubs types-PyMySQL types-beautifulsoup4 types-python-dateutil types-requests
+          
+          # Verify pymysql and types-PyMySQL are installed (for debugging)
+          echo "=== Verifying installed packages ==="
+          pip show pymysql || echo "⚠️  pymysql not installed"
+          pip show types-PyMySQL || echo "⚠️  types-PyMySQL not installed"
+          echo "=== Installed packages containing 'mysql' or 'mypy' ==="
+          pip list | grep -iE "(mysql|mypy)" || echo "No matching packages found"
       
       - name: Run mypy
         working-directory: ${{ inputs.working_directory }}
