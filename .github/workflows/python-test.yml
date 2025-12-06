@@ -352,23 +352,57 @@ jobs:
             
             // Parse pytest-report.xml (JUnit XML format)
             try {
-              const pytestXml = fs.readFileSync(path.join(workingDir, 'pytest-report.xml'), 'utf8');
-              // Parse JUnit XML to extract test counts
-              const testsuiteMatch = pytestXml.match(/<testsuite[^>]*tests="(\d+)"[^>]*failures="(\d+)"[^>]*errors="(\d+)"[^>]*skipped="(\d+)"[^>]*>/);
-              if (testsuiteMatch) {
-                const total = parseInt(testsuiteMatch[1], 10);
-                const failures = parseInt(testsuiteMatch[2], 10);
-                const errors = parseInt(testsuiteMatch[3], 10);
-                const skippedCount = parseInt(testsuiteMatch[4], 10);
-                const passedCount = total - failures - errors - skippedCount;
+              // Helper function to parse XML content
+              function parsePytestXml(xmlContent) {
+                // Use more flexible regex patterns to extract attributes (order-independent)
+                const testsMatch = xmlContent.match(/tests="(\d+)"/);
+                const failuresMatch = xmlContent.match(/failures="(\d+)"/);
+                const errorsMatch = xmlContent.match(/errors="(\d+)"/);
+                const skippedMatch = xmlContent.match(/skipped="(\d+)"/);
                 
-                tests = total.toString();
-                passed = passedCount.toString();
-                failed = (failures + errors).toString();
-                skipped = skippedCount.toString();
+                if (testsMatch) {
+                  const total = parseInt(testsMatch[1], 10);
+                  const failures = failuresMatch ? parseInt(failuresMatch[1], 10) : 0;
+                  const errors = errorsMatch ? parseInt(errorsMatch[1], 10) : 0;
+                  const skippedCount = skippedMatch ? parseInt(skippedMatch[1], 10) : 0;
+                  const passedCount = total - failures - errors - skippedCount;
+                  
+                  tests = total.toString();
+                  passed = passedCount.toString();
+                  failed = (failures + errors).toString();
+                  skipped = skippedCount.toString();
+                  
+                  console.log(`Parsed test results: ${total} total, ${passedCount} passed, ${failures + errors} failed, ${skippedCount} skipped`);
+                  return true;
+                } else {
+                  console.log('Could not find tests attribute in pytest-report.xml');
+                  console.log('File preview:', xmlContent.substring(0, 500));
+                  return false;
+                }
+              }
+              
+              const reportPath = path.join(workingDir, 'pytest-report.xml');
+              console.log(`Looking for pytest report at: ${reportPath}`);
+              
+              // Check if file exists in working directory
+              if (fs.existsSync(reportPath)) {
+                const pytestXml = fs.readFileSync(reportPath, 'utf8');
+                parsePytestXml(pytestXml);
+              } else {
+                console.log(`File not found: ${reportPath}`);
+                // Try root directory as fallback
+                const rootPath = 'pytest-report.xml';
+                if (fs.existsSync(rootPath)) {
+                  console.log(`Found report at root: ${rootPath}`);
+                  const pytestXml = fs.readFileSync(rootPath, 'utf8');
+                  parsePytestXml(pytestXml);
+                } else {
+                  console.log('pytest-report.xml not found in working directory or root');
+                }
               }
             } catch (err) {
               console.log('Could not read pytest report file:', err.message);
+              console.log('Error details:', err.stack);
             }
             
             const output = `## 🧪 Python Tests

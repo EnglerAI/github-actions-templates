@@ -343,7 +343,7 @@ jobs:
       - name: Install cfn-lint
         run: |
           echo "=== Installing cfn-lint ==="
-          pip install cfn-lint
+          pip install cfn-lint junit-xml
           cfn-lint --version
       
       - name: Find CloudFormation templates
