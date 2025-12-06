@@ -376,22 +376,126 @@ jobs:
         run: |
           echo "=== Linting CloudFormation Templates ==="
           
-          # Read templates from output
+          # Read templates from output and generate JUnit XML reports
           echo "${{ steps.find-templates.outputs.templates }}" | while read -r template; do
             if [ -n "${template}" ] && [ -f "${template}" ]; then
               echo ""
               echo "Linting: ${template}"
-              cfn-lint "${template}" || echo "⚠️  Issues found in ${template}"
+              # Generate JUnit XML report for each template
+              TEMPLATE_BASENAME=$(basename "${template}" .yml)
+              TEMPLATE_BASENAME=$(basename "${TEMPLATE_BASENAME}" .yaml)
+              cfn-lint "${template}" --format junit --output-file "${TEMPLATE_BASENAME}-cfnlint.xml" || echo "⚠️  Issues found in ${template}"
             fi
           done
         continue-on-error: true
+      
+      - name: Combine cfn-lint reports
+        if: steps.find-templates.outputs.templates != ''
+        run: |
+          echo "=== Combining cfn-lint Results ==="
+          
+          # Combine all cfn-lint JUnit XML results into one file
+          python3 << 'PYTHON_SCRIPT'
+          import xml.etree.ElementTree as ET
+          import glob
+          import os
+          
+          # Create root test suite
+          root_suite = ET.Element('testsuite')
+          root_suite.set('name', 'cfn-lint-combined')
+          root_suite.set('tests', '0')
+          root_suite.set('failures', '0')
+          root_suite.set('errors', '0')
+          root_suite.set('time', '0.0')
+          
+          total_tests = 0
+          total_failures = 0
+          total_errors = 0
+          total_time = 0.0
+          
+          # Process each cfn-lint XML file
+          for xml_file in glob.glob('*-cfnlint.xml'):
+              try:
+                  tree = ET.parse(xml_file)
+                  test_suite = tree.getroot()
+                  
+                  # Extract counts
+                  tests = int(test_suite.get('tests', 0))
+                  failures = int(test_suite.get('failures', 0))
+                  errors = int(test_suite.get('errors', 0))
+                  time = float(test_suite.get('time', 0.0))
+                  
+                  total_tests += tests
+                  total_failures += failures
+                  total_errors += errors
+                  total_time += time
+                  
+                  # Create a wrapper testsuite for this template
+                  template_suite = ET.SubElement(root_suite, 'testsuite')
+                  template_name = xml_file.replace('-cfnlint.xml', '')
+                  template_suite.set('name', template_name)
+                  template_suite.set('tests', str(tests))
+                  template_suite.set('failures', str(failures))
+                  template_suite.set('errors', str(errors))
+                  template_suite.set('time', str(time))
+                  
+                  # Add all elements from the original testsuite
+                  for child in test_suite:
+                      template_suite.append(child)
+              
+              except Exception as e:
+                  print(f'Error processing {xml_file}: {e}')
+          
+          # Update root suite attributes
+          root_suite.set('tests', str(total_tests))
+          root_suite.set('failures', str(total_failures))
+          root_suite.set('errors', str(total_errors))
+          root_suite.set('time', str(total_time))
+          
+          # Write combined results
+          tree = ET.ElementTree(root_suite)
+          tree.write('cfnlint.xml', encoding='utf-8', xml_declaration=True)
+          print(f'Combined {total_tests} tests, {total_failures} failures, {total_errors} errors')
+          PYTHON_SCRIPT
+      
+      - name: Configure AWS for S3 upload
+        if: inputs.upload_reports && steps.find-templates.outputs.templates != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: us-east-2
+          role-session-name: github-actions-cfn-lint
+      
+      - name: Upload cfn-lint reports to S3
+        if: inputs.upload_reports && steps.find-templates.outputs.templates != ''
+        run: |
+          DATETIME=$(date +"%Y%m%d-%H%M%S")
+          PROJECT_NAME="${{ github.repository }}"
+          PROJECT_NAME="${PROJECT_NAME#*/}"
+          # Use CloudBot ACCOUNTID (not AWS_ACCOUNT_ID) for S3 paths
+          ACCOUNTID="${{ inputs.account_id || secrets.accountid }}"
+          if [ -z "$ACCOUNTID" ]; then
+            echo "⚠️  Warning: ACCOUNTID not provided, cannot upload to S3"
+            exit 0
+          fi
+          REPORTS_BUCKET="cloudbot-reporting-v2"
+          
+          if [ -f "cfnlint.xml" ]; then
+            echo "Uploading cfnlint.xml to S3..."
+            aws s3 cp "cfnlint.xml" \
+              "s3://${REPORTS_BUCKET}/incoming/${ACCOUNTID}/${PROJECT_NAME}/${DATETIME}-cfnlint.xml" \
+              --region us-east-2 || echo "Warning: Failed to upload cfnlint.xml"
+          fi
+        shell: bash
       
       - name: Upload lint results as artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cfn-lint-results
-          path: ${{ inputs.working_directory }}
+          path: |
+            cfnlint.xml
+            *-cfnlint.xml
           if-no-files-found: ignore
           retention-days: 7
 
