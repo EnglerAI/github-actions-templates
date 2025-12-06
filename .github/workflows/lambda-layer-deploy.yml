@@ -1,0 +1,317 @@
+name: Lambda Layer Deploy
+
+on:
+  workflow_call:
+    inputs:
+      layer_name:
+        description: "Name of Lambda layer (required)"
+        required: true
+        type: string
+      stack_name:
+        description: "CloudFormation stack name (defaults to layer_name-stack)"
+        required: false
+        type: string
+      environment:
+        description: "Target environment (dev/qat/stg/prd)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region"
+        required: true
+        type: string
+        default: "us-east-2"
+      python_version:
+        description: "Python version"
+        required: false
+        type: string
+        default: "3.12"
+      sam_template:
+        description: "Path to SAM template file"
+        required: false
+        type: string
+        default: "template.yml"
+      requirements_file:
+        description: "Path to requirements.txt (relative to repo root)"
+        required: false
+        type: string
+        default: "requirements.txt"
+      layer_code_directory:
+        description: "Directory containing layer code (defaults to 'python')"
+        required: false
+        type: string
+        default: "python"
+      kms_key_alias:
+        description: "KMS key alias for S3 encryption"
+        required: false
+        type: string
+        default: "alias/CloudBotPipelineKey"
+    secrets:
+      aws_role_arn:
+        description: "AWS IAM role ARN for OIDC"
+        required: true
+      aws_account_id:
+        description: "AWS Account ID"
+        required: true
+      gitlab_api_token:
+        description: "GitLab API token for private packages"
+        required: false
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: "pip"
+
+      - name: Package Lambda Layer
+        run: |
+          echo "=== Packaging Lambda Layer ==="
+          
+          # Lambda Layers require the code in a specific directory structure
+          # For Python layers, code must be in the specified directory (default: 'python')
+          LAYER_DIR="${{ inputs.layer_code_directory }}"
+          
+          if [ ! -d "${LAYER_DIR}" ]; then
+            echo "❌ Error: '${LAYER_DIR}' directory not found"
+            echo "Lambda Layers require code in a '${LAYER_DIR}' directory"
+            exit 1
+          fi
+          
+          # Create layer package directory
+          mkdir -p layer-package
+          
+          # Copy layer code directory to layer-package
+          echo "Copying ${LAYER_DIR} directory to layer package..."
+          cp -r "${LAYER_DIR}" layer-package/
+          
+          # Install any dependencies if requirements file exists
+          REQ_FILE="${{ inputs.requirements_file }}"
+          if [ -f "${LAYER_DIR}/requirements.txt" ]; then
+            echo "Installing dependencies from ${LAYER_DIR}/requirements.txt..."
+            # Handle GitLab private packages if token provided
+            if [ -n "${{ secrets.gitlab_api_token }}" ]; then
+              pip install \
+                --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
+                -r "${LAYER_DIR}/requirements.txt" \
+                -t "layer-package/${LAYER_DIR}/"
+            else
+              pip install -r "${LAYER_DIR}/requirements.txt" -t "layer-package/${LAYER_DIR}/"
+            fi
+          elif [ -f "${REQ_FILE}" ]; then
+            echo "Installing dependencies from ${REQ_FILE}..."
+            # Handle GitLab private packages if token provided
+            if [ -n "${{ secrets.gitlab_api_token }}" ]; then
+              pip install \
+                --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
+                -r "${REQ_FILE}" \
+                -t "layer-package/${LAYER_DIR}/"
+            else
+              pip install -r "${REQ_FILE}" -t "layer-package/${LAYER_DIR}/"
+            fi
+          else
+            echo "No requirements.txt found, skipping dependency installation"
+          fi
+          
+          # Create ZIP archive for the layer
+          echo "Creating layer ZIP archive..."
+          cd layer-package
+          zip -r ../layer.zip . -x "*.pyc" -x "*__pycache__*" -x "*.git*" -x "*.pytest_cache*"
+          cd ..
+          
+          # Show package size
+          ls -lh layer.zip
+          echo "✅ Lambda layer package created: $(du -h layer.zip | cut -f1)"
+
+      - name: Upload layer package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-layer-package-${{ inputs.environment }}
+          path: layer.zip
+          retention-days: 7
+
+  deploy:
+    needs: [package]
+    if: |
+      always() && 
+      (needs.package.result == 'success')
+    runs-on: ubuntu-latest
+    outputs:
+      stack_name: ${{ steps.deploy.outputs.stack_name }}
+      layer_arn: ${{ steps.deploy.outputs.layer_arn }}
+    environment:
+      name: ${{ inputs.environment }}
+      url: https://console.aws.amazon.com/lambda/home?region=${{ inputs.aws_region }}#/layers
+    permissions:
+      id-token: write # Required for OIDC
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download layer package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lambda-layer-package-${{ inputs.environment }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions-layer-deploy
+
+      - name: Upload layer package to S3
+        run: |
+          echo "=== Uploading Layer Package to S3 ==="
+          
+          # S3 bucket for artifacts (matches GitLab CI/CD approach)
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${{ inputs.aws_region }}-${{ secrets.aws_account_id }}"
+          S3_KEY="lambda-packages/${{ inputs.layer_name }}/layer-${{ github.sha }}.zip"
+          
+          echo "Bucket: ${ARTIFACTS_BUCKET}"
+          echo "Key: ${S3_KEY}"
+          
+          # Upload to S3 with KMS encryption (required by bucket policy)
+          aws s3 cp layer.zip "s3://${ARTIFACTS_BUCKET}/${S3_KEY}" \
+            --sse aws:kms \
+            --sse-kms-key-id ${{ inputs.kms_key_alias }} \
+            --region ${{ inputs.aws_region }}
+          
+          echo "s3_bucket=${ARTIFACTS_BUCKET}" >> $GITHUB_ENV
+          echo "s3_key=${S3_KEY}" >> $GITHUB_ENV
+          
+          echo "✅ Layer package uploaded to S3 with KMS encryption"
+
+      - name: Check existing resources
+        run: |
+          echo "=== Checking Existing Resources ==="
+          
+          # Determine stack name
+          if [ -n "${{ inputs.stack_name }}" ]; then
+            STACK_NAME="${{ inputs.stack_name }}"
+          else
+            STACK_NAME="${{ inputs.layer_name }}-stack"
+          fi
+          
+          # Check if stack exists
+          if aws cloudformation describe-stacks --stack-name ${STACK_NAME} --region ${{ inputs.aws_region }} &>/dev/null; then
+            echo "✅ Stack '${STACK_NAME}' exists - will be updated"
+            aws cloudformation describe-stacks \
+              --stack-name ${STACK_NAME} \
+              --region ${{ inputs.aws_region }} \
+              --query 'Stacks[0].{StackName:StackName,StackStatus:StackStatus,CreationTime:CreationTime}' \
+              --output table
+          else
+            echo "ℹ️  Stack '${STACK_NAME}' does not exist - will be created"
+          fi
+          
+          # Check if SSM parameter exists (if layer_name-latest pattern is used)
+          SSM_PARAM_NAME="${{ inputs.layer_name }}-latest"
+          if aws ssm get-parameter --name "${SSM_PARAM_NAME}" --region ${{ inputs.aws_region }} &>/dev/null 2>&1; then
+            echo "✅ SSM parameter '${SSM_PARAM_NAME}' exists"
+            CURRENT_ARN=$(aws ssm get-parameter \
+              --name "${SSM_PARAM_NAME}" \
+              --region ${{ inputs.aws_region }} \
+              --query 'Parameter.Value' \
+              --output text 2>/dev/null || echo "N/A")
+            echo "   Current Layer ARN: ${CURRENT_ARN}"
+          else
+            echo "ℹ️  SSM parameter '${SSM_PARAM_NAME}' does not exist - will be created by SAM template"
+          fi
+
+      - name: Install SAM CLI
+        run: |
+          echo "=== Installing SAM CLI ==="
+          pip install aws-sam-cli
+          sam --version
+
+      - name: Deploy Lambda Layer with SAM
+        id: deploy
+        run: |
+          echo "=== Deploying Lambda Layer with SAM ==="
+          
+          # Determine stack name
+          if [ -n "${{ inputs.stack_name }}" ]; then
+            STACK_NAME="${{ inputs.stack_name }}"
+          else
+            STACK_NAME="${{ inputs.layer_name }}-stack"
+          fi
+          
+          echo "Stack Name: ${STACK_NAME}"
+          echo "Template: ${{ inputs.sam_template }}"
+          
+          # Verify template exists
+          if [ ! -f "${{ inputs.sam_template }}" ]; then
+            echo "❌ Error: SAM template not found: ${{ inputs.sam_template }}"
+            exit 1
+          fi
+          
+          # Deploy using SAM (matches GitLab CI/CD approach)
+          sam deploy \
+            --template-file ${{ inputs.sam_template }} \
+            --stack-name ${STACK_NAME} \
+            --parameter-overrides \
+              ARTIFACTSBUCKET=${{ env.s3_bucket }} \
+              S3Key=${{ env.s3_key }} \
+              ACCOUNTID=${{ secrets.aws_account_id }} \
+              NAME=${{ inputs.layer_name }} \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset \
+            --region ${{ inputs.aws_region }}
+          
+          echo "stack_name=${STACK_NAME}" >> $GITHUB_ENV
+          echo "✅ SAM deployment completed"
+
+      - name: Get Layer Version ARN
+        id: layer
+        run: |
+          echo "=== Getting Layer Version ARN ==="
+          
+          STACK_NAME="${{ env.stack_name }}"
+          
+          # Get layer ARN from CloudFormation stack outputs
+          LAYER_ARN=$(aws cloudformation describe-stacks \
+            --stack-name ${STACK_NAME} \
+            --region ${{ inputs.aws_region }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`LayerVersionArn`].OutputValue' \
+            --output text 2>/dev/null || echo "")
+          
+          if [ -z "${LAYER_ARN}" ]; then
+            # Try to get from SSM parameter (as defined in template)
+            SSM_PARAM_NAME="${{ inputs.layer_name }}-latest"
+            LAYER_ARN=$(aws ssm get-parameter \
+              --name "${SSM_PARAM_NAME}" \
+              --region ${{ inputs.aws_region }} \
+              --query 'Parameter.Value' \
+              --output text 2>/dev/null || echo "")
+          fi
+          
+          if [ -n "${LAYER_ARN}" ]; then
+            echo "Layer Version ARN: ${LAYER_ARN}"
+            echo "layer_arn=${LAYER_ARN}" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  Warning: Could not retrieve layer ARN"
+          fi
+
+      - name: Verify deployment
+        run: |
+          echo "=== Verifying Layer Deployment ==="
+          
+          STACK_NAME="${{ env.stack_name }}"
+          
+          # Get stack status
+          aws cloudformation describe-stacks \
+            --stack-name ${STACK_NAME} \
+            --region ${{ inputs.aws_region }} \
+            --query 'Stacks[0].{StackName:StackName,StackStatus:StackStatus}' \
+            --output table
+          
+          echo "✅ Layer deployment verified"
+

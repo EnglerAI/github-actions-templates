@@ -1,0 +1,208 @@
+# Lambda Layer Deployment Workflow Example
+# Copy this to your Lambda layer repository as .github/workflows/deploy.yml
+# Then customize the CUSTOMIZE sections for your specific layer
+
+name: Deploy [YOUR-LAYER-NAME] Layer
+
+on:
+  push:
+    branches:
+      - main # Production
+      - env/dev # Development
+      # CUSTOMIZE: Add more environment branches (env/qat, env/stg) as needed
+  pull_request:
+    branches:
+      - main
+      - env/dev
+      # CUSTOMIZE: Add more environment branches as needed
+
+jobs:
+  # Step 1: Determine environment from branch
+  # CUSTOMIZE: Branch names, environment names, and stack name
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      deploy_allowed: ${{ steps.env.outputs.deploy_allowed }}
+      stack_name: ${{ steps.env.outputs.stack_name }}
+      account_id: ${{ steps.env.outputs.account_id }}
+    steps:
+      - name: Determine environment
+        id: env
+        run: |
+          echo "=== Environment Determination ==="
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Event: ${{ github.event_name }}"
+
+          # For pull requests, use base branch
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BRANCH="${{ github.base_ref }}"
+            DEPLOY_ALLOWED="false"
+            echo "Pull request detected, target branch: ${BRANCH}"
+          else
+            BRANCH="${{ github.ref_name }}"
+            DEPLOY_ALLOWED="true"
+          fi
+
+          # Route to environment based on branch
+          # CUSTOMIZE: Add more branches/environments as needed
+          case "${BRANCH}" in
+            main)
+              ENV="prd"
+              ACCOUNT_ID="${{ secrets.AWS_ACCOUNT_ID_PRD }}"
+              STACK_NAME="[YOUR-LAYER-NAME]-stack"  # CUSTOMIZE: Your CloudFormation stack name
+              ;;
+            env/dev)
+              ENV="dev"
+              ACCOUNT_ID="${{ secrets.AWS_ACCOUNT_ID_DEV }}"
+              STACK_NAME="[YOUR-LAYER-NAME]-stack"  # CUSTOMIZE: Your CloudFormation stack name
+              ;;
+            # CUSTOMIZE: Add more environments (qat, stg) as needed
+            # env/qat)
+            #   ENV="qat"
+            #   ACCOUNT_ID="${{ secrets.AWS_ACCOUNT_ID_QAT }}"
+            #   STACK_NAME="[YOUR-LAYER-NAME]-stack"
+            #   ;;
+            *)
+              ENV="unknown"
+              ACCOUNT_ID=""
+              STACK_NAME=""
+              DEPLOY_ALLOWED="false"
+              echo "⚠️  Unknown branch: ${BRANCH}"
+              ;;
+          esac
+
+          echo "Environment: ${ENV}"
+          echo "Deploy Allowed: ${DEPLOY_ALLOWED}"
+          echo "Stack Name: ${STACK_NAME}"
+          echo "Account ID: ${ACCOUNT_ID}"
+
+          # Set outputs (account_id is not a secret, so safe to output)
+          echo "environment=${ENV}" >> $GITHUB_OUTPUT
+          echo "deploy_allowed=${DEPLOY_ALLOWED}" >> $GITHUB_OUTPUT
+          echo "stack_name=${STACK_NAME}" >> $GITHUB_OUTPUT
+          echo "account_id=${ACCOUNT_ID}" >> $GITHUB_OUTPUT
+
+  # Step 2: Verify documentation
+  # Validates README.md exists and is properly formatted
+  verify-docs:
+    uses: bengler9/github-actions-templates/.github/workflows/verify-docs.yml@main
+
+  # Step 3: Quality checks (linting, type checking, template validation)
+  # CUSTOMIZE: Python version, enable/disable specific checks
+  # NOTE: For Lambda layers, code is in python/ directory
+  quality:
+    needs: [setup]
+    permissions:
+      id-token: write # Required for AWS OIDC authentication
+      contents: read
+    uses: bengler9/github-actions-templates/.github/workflows/quality-checks.yml@main
+    with:
+      python_version: "3.12"  # CUSTOMIZE: Your Python version
+      working_directory: "python"  # Lambda layers have code in python/ directory
+      requirements_file: "../requirements.txt"  # Requirements at root, working dir is python/
+      run_flake8: true         # CUSTOMIZE: Enable/disable flake8
+      run_mypy: true           # CUSTOMIZE: Enable/disable mypy
+      run_cfn_lint: true       # CUSTOMIZE: Enable/disable CloudFormation linting
+      upload_reports: ${{ needs.setup.outputs.deploy_allowed == 'true' }}
+    secrets:
+      # IMPORTANT: Secrets cannot be passed through job outputs - reference directly
+      aws_role_arn: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_PRD }}
+      aws_account_id: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ACCOUNT_ID_DEV || secrets.AWS_ACCOUNT_ID_PRD }}
+      accountid: ${{ secrets.ACCOUNTID }}
+
+  # Step 4: Security scans
+  # CUSTOMIZE: Python version, enable/disable specific security scans
+  # NOTE: For Lambda layers, code is in python/ directory
+  security:
+    needs: [setup]
+    permissions:
+      id-token: write # Required for AWS OIDC authentication
+      contents: read
+    uses: bengler9/github-actions-templates/.github/workflows/security-scans.yml@main
+    with:
+      python_version: "3.12"  # CUSTOMIZE: Your Python version
+      working_directory: "python"  # Lambda layers have code in python/ directory
+      requirements_file: "../requirements.txt"  # Requirements at root, working dir is python/
+      run_bandit: true         # CUSTOMIZE: Enable/disable Bandit security scan
+      run_checkov: true        # CUSTOMIZE: Enable/disable Checkov IaC scan
+      run_radon: true          # CUSTOMIZE: Enable/disable Radon complexity analysis
+      upload_reports: ${{ needs.setup.outputs.deploy_allowed == 'true' }}
+    secrets:
+      aws_role_arn: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_PRD }}
+      aws_account_id: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ACCOUNT_ID_DEV || secrets.AWS_ACCOUNT_ID_PRD }}
+      accountid: ${{ secrets.ACCOUNTID }}
+
+  # Step 5: Run Python tests with coverage
+  # CUSTOMIZE: Coverage threshold, enable/disable security/complexity scans
+  # NOTE: For Lambda layers, code is in python/ directory
+  test:
+    needs: [setup]
+    permissions:
+      security-events: write # Required for uploading SARIF results
+      contents: read
+      id-token: write # Required for AWS OIDC
+      pull-requests: write # Required for commenting on PRs
+      issues: write # Required for commenting on PRs
+    uses: bengler9/github-actions-templates/.github/workflows/python-test.yml@main
+    with:
+      python_version: "3.12"  # CUSTOMIZE: Your Python version
+      working_directory: "python"  # Lambda layers have code in python/ directory
+      requirements_file: "../requirements.txt"  # Requirements at root, working dir is python/
+      run_security_scan: false # Already done in security job
+      run_complexity_scan: false # Already done in security job
+      coverage_threshold: 0     # CUSTOMIZE: Minimum coverage % (0 = no threshold)
+      upload_reports: ${{ needs.setup.outputs.deploy_allowed == 'true' }}
+      # account_id not passed - will use secrets.accountid (CloudBot ACCOUNTID)
+    secrets:
+      aws_role_arn: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_PRD }}
+      aws_account_id: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ACCOUNT_ID_DEV || secrets.AWS_ACCOUNT_ID_PRD }}
+      accountid: ${{ secrets.ACCOUNTID }}
+
+  # Step 6: Code analyzer (upload code archive to S3 for CloudBot analysis)
+  # Only runs on branches where deployment is allowed (not on PRs)
+  code-analyzer:
+    needs: [setup]
+    if: needs.setup.outputs.deploy_allowed == 'true'
+    permissions:
+      id-token: write # Required for AWS OIDC authentication
+      contents: read
+    uses: bengler9/github-actions-templates/.github/workflows/code-analyzer.yml@main
+    with:
+      upload_reports: true
+    secrets:
+      aws_role_arn: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_PRD }}
+      aws_account_id: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ACCOUNT_ID_DEV || secrets.AWS_ACCOUNT_ID_PRD }}
+      accountid: ${{ secrets.ACCOUNTID }}
+
+  # Step 7: Package and Deploy Lambda Layer
+  # Uses reusable workflow for layer-specific packaging and deployment
+  deploy:
+    needs: [setup, verify-docs, quality, security, test, code-analyzer]
+    if: |
+      always() &&
+      needs.setup.outputs.deploy_allowed == 'true' &&
+      github.event_name == 'push' &&
+      (needs.verify-docs.result == 'success' || needs.verify-docs.result == 'skipped') &&
+      (needs.quality.result == 'success' || needs.quality.result == 'skipped') &&
+      (needs.security.result == 'success' || needs.security.result == 'skipped') &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      (needs.code-analyzer.result == 'success' || needs.code-analyzer.result == 'skipped')
+    permissions:
+      id-token: write # Required for AWS OIDC authentication
+      contents: read
+    uses: bengler9/github-actions-templates/.github/workflows/lambda-layer-deploy.yml@main
+    with:
+      layer_name: "[YOUR-LAYER-NAME]"  # CUSTOMIZE: Your layer name (e.g., "layer-testing-utils")
+      stack_name: ${{ needs.setup.outputs.stack_name }}
+      environment: ${{ needs.setup.outputs.environment }}
+      aws_region: "us-east-2"  # CUSTOMIZE: Your AWS region
+      python_version: "3.12"  # CUSTOMIZE: Your Python version
+      sam_template: "template.yml"  # CUSTOMIZE: Path to your SAM template
+      requirements_file: "requirements.txt"  # CUSTOMIZE: Path to requirements.txt
+      layer_code_directory: "python"  # CUSTOMIZE: Directory containing layer code (default: "python")
+    secrets:
+      aws_role_arn: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_PRD }}
+      aws_account_id: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ACCOUNT_ID_DEV || secrets.AWS_ACCOUNT_ID_PRD }}
+      gitlab_api_token: ${{ secrets.GITLAB_API_TOKEN }}  # Optional: For private GitLab packages
+
