@@ -212,14 +212,12 @@ jobs:
             
             # Create .coveragerc to exclude test files from coverage
             # Since we're in the working directory, create it here
-            cat > .coveragerc << 'EOF'
-[run]
-omit = 
-    test_*.py
-    */test_*.py
-    tests/*
-    */tests/*
-EOF
+            echo "[run]" > .coveragerc
+            echo "omit = " >> .coveragerc
+            echo "    test_*.py" >> .coveragerc
+            echo "    */test_*.py" >> .coveragerc
+            echo "    tests/*" >> .coveragerc
+            echo "    */tests/*" >> .coveragerc
             
             echo "Running pytest on: $PYTEST_TARGET"
             pytest $PYTEST_TARGET -v \
