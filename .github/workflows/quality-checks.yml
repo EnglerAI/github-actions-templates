@@ -39,7 +39,7 @@ on:
         type: boolean
         default: false
       account_id:
-        description: 'Account ID for S3 uploads'
+        description: 'CloudBot Account ID for S3 uploads (overrides secret)'
         required: false
         type: string
     secrets:
@@ -50,7 +50,10 @@ on:
         description: 'AWS IAM role ARN for S3 uploads'
         required: false
       aws_account_id:
-        description: 'AWS Account ID'
+        description: 'AWS Account ID (for AWS operations, not S3 paths)'
+        required: false
+      accountid:
+        description: 'CloudBot Account ID for S3 upload paths'
         required: false
 
 jobs:
@@ -148,14 +151,19 @@ jobs:
           DATETIME=$(date +"%Y%m%d-%H%M%S")
           PROJECT_NAME="${{ github.repository }}"
           PROJECT_NAME="${PROJECT_NAME#*/}"
-          ACCOUNT_ID="${{ inputs.account_id || secrets.aws_account_id }}"
+          # Use CloudBot ACCOUNTID (not AWS_ACCOUNT_ID) for S3 paths
+          ACCOUNTID="${{ inputs.account_id || secrets.accountid }}"
+          if [ -z "$ACCOUNTID" ]; then
+            echo "⚠️  Warning: ACCOUNTID not provided, cannot upload to S3"
+            exit 0
+          fi
           REPORTS_BUCKET="cloudbot-reporting-v2"
           
           for report in flakereport flaketestreport flakedocsreport flakedocstestreport; do
             if [ -f "${{ inputs.working_directory }}/${report}.txt" ]; then
               echo "Uploading ${report}.txt to S3..."
               aws s3 cp "${{ inputs.working_directory }}/${report}.txt" \
-                "s3://${REPORTS_BUCKET}/incoming/${ACCOUNT_ID}/${PROJECT_NAME}/${DATETIME}-${report}.txt" \
+                "s3://${REPORTS_BUCKET}/incoming/${ACCOUNTID}/${PROJECT_NAME}/${DATETIME}-${report}.txt" \
                 --sse aws:kms \
                 --sse-kms-key-id alias/CloudBotPipelineKey \
                 --region us-east-2 || echo "Warning: Failed to upload ${report}.txt"
@@ -294,13 +302,18 @@ jobs:
           DATETIME=$(date +"%Y%m%d-%H%M%S")
           PROJECT_NAME="${{ github.repository }}"
           PROJECT_NAME="${PROJECT_NAME#*/}"
-          ACCOUNT_ID="${{ inputs.account_id || secrets.aws_account_id }}"
+          # Use CloudBot ACCOUNTID (not AWS_ACCOUNT_ID) for S3 paths
+          ACCOUNTID="${{ inputs.account_id || secrets.accountid }}"
+          if [ -z "$ACCOUNTID" ]; then
+            echo "⚠️  Warning: ACCOUNTID not provided, cannot upload to S3"
+            exit 0
+          fi
           REPORTS_BUCKET="cloudbot-reporting-v2"
           
           if [ -f "${{ inputs.working_directory }}/mypy.xml" ]; then
             echo "Uploading mypy.xml to S3..."
             aws s3 cp "${{ inputs.working_directory }}/mypy.xml" \
-              "s3://${REPORTS_BUCKET}/incoming/${ACCOUNT_ID}/${PROJECT_NAME}/${DATETIME}-mypy.xml" \
+              "s3://${REPORTS_BUCKET}/incoming/${ACCOUNTID}/${PROJECT_NAME}/${DATETIME}-mypy.xml" \
               --sse aws:kms \
               --sse-kms-key-id alias/CloudBotPipelineKey \
               --region us-east-2 || echo "Warning: Failed to upload mypy.xml"
@@ -309,7 +322,7 @@ jobs:
           if [ -f "${{ inputs.working_directory }}/index.xml" ]; then
             echo "Uploading index.xml to S3..."
             aws s3 cp "${{ inputs.working_directory }}/index.xml" \
-              "s3://${REPORTS_BUCKET}/incoming/${ACCOUNT_ID}/${PROJECT_NAME}/${DATETIME}-mypycov.xml" \
+              "s3://${REPORTS_BUCKET}/incoming/${ACCOUNTID}/${PROJECT_NAME}/${DATETIME}-mypycov.xml" \
               --sse aws:kms \
               --sse-kms-key-id alias/CloudBotPipelineKey \
               --region us-east-2 || echo "Warning: Failed to upload index.xml"

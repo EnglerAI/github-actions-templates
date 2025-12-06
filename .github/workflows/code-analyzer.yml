@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       account_id:
-        description: 'Account ID for S3 path'
+        description: 'CloudBot Account ID for S3 path (overrides secret)'
         required: false
         type: string
       project_name:
@@ -31,7 +31,10 @@ on:
         description: 'AWS IAM role ARN for S3 uploads'
         required: true
       aws_account_id:
-        description: 'AWS Account ID'
+        description: 'AWS Account ID (for bucket naming)'
+        required: false
+      accountid:
+        description: 'CloudBot Account ID for S3 upload paths'
         required: false
 
 jobs:
@@ -83,24 +86,30 @@ jobs:
         run: |
           echo "=== Uploading Code Archive to S3 ==="
           
-          # Determine account ID
-          if [ -n "${{ inputs.account_id }}" ]; then
-            ACCOUNT_ID="${{ inputs.account_id }}"
-          elif [ -n "${{ secrets.aws_account_id }}" ]; then
-            ACCOUNT_ID="${{ secrets.aws_account_id }}"
+          # Determine AWS Account ID (for bucket name)
+          if [ -n "${{ secrets.aws_account_id }}" ]; then
+            AWS_ACCOUNT_ID="${{ secrets.aws_account_id }}"
           else
             # Try to get from AWS identity
-            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           fi
           
-          # S3 bucket and key (matches GitLab pattern)
-          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${{ inputs.aws_region }}-${ACCOUNT_ID}"
-          S3_KEY="codeitems/${ACCOUNT_ID}/${{ steps.archive.outputs.project_name }}/codeitem-${GITHUB_SHA}.tar.gz"
+          # Determine CloudBot ACCOUNTID (for S3 key path)
+          ACCOUNTID="${{ inputs.account_id || secrets.accountid }}"
+          if [ -z "$ACCOUNTID" ]; then
+            echo "⚠️  Warning: ACCOUNTID not provided, cannot upload to S3"
+            exit 0
+          fi
+          
+          # S3 bucket uses AWS Account ID, key path uses CloudBot ACCOUNTID
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${{ inputs.aws_region }}-${AWS_ACCOUNT_ID}"
+          S3_KEY="codeitems/${ACCOUNTID}/${{ steps.archive.outputs.project_name }}/codeitem-${GITHUB_SHA}.tar.gz"
           
           echo "Bucket: ${ARTIFACTS_BUCKET}"
           echo "Key: ${S3_KEY}"
           echo "Project: ${{ steps.archive.outputs.project_name }}"
-          echo "Account ID: ${ACCOUNT_ID}"
+          echo "AWS Account ID: ${AWS_ACCOUNT_ID}"
+          echo "CloudBot ACCOUNTID: ${ACCOUNTID}"
           
           # Upload to S3 with KMS encryption
           if aws s3 cp "${{ steps.archive.outputs.archive_name }}" "s3://${ARTIFACTS_BUCKET}/${S3_KEY}" \
