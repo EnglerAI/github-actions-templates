@@ -171,8 +171,6 @@ jobs:
     uses: bengler9/github-actions-templates/.github/workflows/python-test.yml@main
     with:
       python_version: "3.12"  # CUSTOMIZE: Your Python version
-      run_security_scan: false # Already done in security job
-      run_complexity_scan: false # Already done in security job
       coverage_threshold: 0     # CUSTOMIZE: Minimum coverage % (0 = no threshold)
       upload_reports: ${{ needs.setup.outputs.deploy_allowed == 'true' }}
     secrets:

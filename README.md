@@ -192,15 +192,15 @@ Verify documentation exists and is properly formatted.
 
 ### Python Test (`python-test.yml`)
 
-Python testing with pytest, coverage reporting, and optional security/complexity scans.
+Python testing with pytest and coverage reporting.
+
+**Note:** Security scanning (bandit) and complexity analysis (radon) are handled by the `security-scans.yml` workflow. Use that workflow for security and complexity checks.
 
 **Inputs:**
 
 - `python_version` (optional): Python version, default: '3.12'
 - `requirements_file` (optional): Path to requirements.txt
 - `working_directory` (optional): Working directory, default: '.'
-- `run_security_scan` (optional): Run bandit security scan, default: true
-- `run_complexity_scan` (optional): Run radon complexity scan, default: false
 - `coverage_threshold` (optional): Minimum coverage percentage, default: 0
 - `upload_reports` (optional): Upload reports to S3, default: false
 - `account_id` (optional): Account ID for S3 uploads

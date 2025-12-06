@@ -149,8 +149,6 @@ jobs:
       python_version: "3.12"  # CUSTOMIZE: Your Python version
       working_directory: "python"  # Lambda layers have code in python/ directory
       requirements_file: "../requirements.txt"  # Requirements at root, working dir is python/
-      run_security_scan: false # Already done in security job
-      run_complexity_scan: false # Already done in security job
       coverage_threshold: 0     # CUSTOMIZE: Minimum coverage % (0 = no threshold)
       upload_reports: ${{ needs.setup.outputs.deploy_allowed == 'true' }}
       # account_id not passed - will use secrets.accountid (CloudBot ACCOUNTID)

@@ -18,16 +18,6 @@ on:
         required: false
         type: string
         default: '.'
-      run_security_scan:
-        description: 'Run security scanning with bandit'
-        required: false
-        type: boolean
-        default: true
-      run_complexity_scan:
-        description: 'Run complexity scanning with radon'
-        required: false
-        type: boolean
-        default: false
       coverage_threshold:
         description: 'Minimum code coverage percentage'
         required: false
@@ -107,45 +97,6 @@ jobs:
             --no-strict-optional \
             --allow-untyped-calls \
             --allow-untyped-defs
-        continue-on-error: true
-
-  security:
-    if: inputs.run_security_scan
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write  # For uploading SARIF
-      contents: read
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ inputs.python_version }}
-      
-      - name: Install bandit
-        run: pip install bandit[sarif]
-      
-      - name: Run bandit security scan
-        working-directory: ${{ inputs.working_directory }}
-        run: |
-          bandit -r . -x '/tests' -f sarif -o bandit-report.sarif
-        continue-on-error: true
-      
-      - name: Upload security scan results
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: ${{ inputs.working_directory }}/bandit-report.sarif
-          category: bandit
-        continue-on-error: true
-      
-      - name: Check for high severity issues
-        working-directory: ${{ inputs.working_directory }}
-        run: |
-          # Run bandit again with exit code
-          bandit -r . -x '/tests' -ll -ii
         continue-on-error: true
 
   test:
@@ -425,34 +376,4 @@ jobs:
               repo: context.repo.repo,
               body: output
             });
-
-  complexity:
-    if: inputs.run_complexity_scan
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ inputs.python_version }}
-      
-      - name: Install radon
-        run: pip install radon
-      
-      - name: Run complexity analysis
-        working-directory: ${{ inputs.working_directory }}
-        run: |
-          echo "=== Cyclomatic Complexity ==="
-          radon cc . -i "tests" -s -a
-          
-          echo ""
-          echo "=== Maintainability Index ==="
-          radon mi . -i "tests" -s
-          
-          echo ""
-          echo "=== Raw Metrics ==="
-          radon raw . -i "tests" -s
-        continue-on-error: true
 
