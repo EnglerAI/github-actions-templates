@@ -210,9 +210,21 @@ jobs:
               PYTEST_TARGET="."
             fi
             
+            # Create .coveragerc to exclude test files from coverage
+            # Since we're in the working directory, create it here
+            cat > .coveragerc << 'EOF'
+[run]
+omit = 
+    test_*.py
+    */test_*.py
+    tests/*
+    */tests/*
+EOF
+            
             echo "Running pytest on: $PYTEST_TARGET"
             pytest $PYTEST_TARGET -v \
               --cov=. \
+              --cov-config=.coveragerc \
               --cov-report=term-missing \
               --cov-report=xml \
               --cov-report=html \
@@ -320,10 +332,18 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            let coverage = 'N/A';
+            const path = require('path');
+            const workingDir = '${{ inputs.working_directory }}';
             
+            let coverage = 'N/A';
+            let tests = 'N/A';
+            let passed = 'N/A';
+            let failed = 'N/A';
+            let skipped = 'N/A';
+            
+            // Parse coverage.xml
             try {
-              const coverageXml = fs.readFileSync('${{ inputs.working_directory }}/coverage.xml', 'utf8');
+              const coverageXml = fs.readFileSync(path.join(workingDir, 'coverage.xml'), 'utf8');
               const match = coverageXml.match(/line-rate="([0-9.]+)"/);
               if (match) {
                 coverage = (parseFloat(match[1]) * 100).toFixed(2) + '%';
@@ -332,11 +352,38 @@ jobs:
               console.log('Could not read coverage file');
             }
             
+            // Parse pytest-report.xml (JUnit XML format)
+            try {
+              const pytestXml = fs.readFileSync(path.join(workingDir, 'pytest-report.xml'), 'utf8');
+              // Parse JUnit XML to extract test counts
+              const testsuiteMatch = pytestXml.match(/<testsuite[^>]*tests="(\d+)"[^>]*failures="(\d+)"[^>]*errors="(\d+)"[^>]*skipped="(\d+)"[^>]*>/);
+              if (testsuiteMatch) {
+                const total = parseInt(testsuiteMatch[1], 10);
+                const failures = parseInt(testsuiteMatch[2], 10);
+                const errors = parseInt(testsuiteMatch[3], 10);
+                const skippedCount = parseInt(testsuiteMatch[4], 10);
+                const passedCount = total - failures - errors - skippedCount;
+                
+                tests = total.toString();
+                passed = passedCount.toString();
+                failed = (failures + errors).toString();
+                skipped = skippedCount.toString();
+              }
+            } catch (err) {
+              console.log('Could not read pytest report file:', err.message);
+            }
+            
             const output = `## 🧪 Python Tests
             
             **Python Version:** \`${{ inputs.python_version }}\`
-            **Coverage:** \`${coverage}\`
+            **Coverage:** \`${coverage}\` (excluding test files)
             **Status:** \`${{ job.status }}\`
+            
+            **Test Results:**
+            - ✅ **Passing:** ${passed}
+            - ❌ **Failing:** ${failed}
+            - ⏭️ **Skipped:** ${skipped}
+            - 📊 **Total:** ${tests}
             
             *View detailed results in the Actions tab*`;
             

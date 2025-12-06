@@ -348,12 +348,16 @@ jobs:
       
       - name: Find CloudFormation templates
         id: find-templates
-        working-directory: ${{ inputs.working_directory }}
+        # Search from repo root, not working_directory, since templates are typically at root
         run: |
           echo "=== Finding CloudFormation/SAM Templates ==="
           
-          # Find all template files
-          TEMPLATES=$(find . -name "*.yml" -o -name "*.yaml" | grep -E "(template|cloudformation|sam)" | grep -v node_modules || true)
+          # Find all template files from repository root
+          # Look for files with "template", "cloudformation", or "sam" in the name
+          # Also check for common CloudFormation/SAM file patterns
+          TEMPLATES=$(find . -type f \( -name "*.yml" -o -name "*.yaml" \) \
+            \( -iname "*template*" -o -iname "*cloudformation*" -o -iname "*sam*" -o -name "template.yml" -o -name "template.yaml" -o -name "sam.yml" -o -name "sam.yaml" \) \
+            ! -path "*/node_modules/*" ! -path "*/.git/*" ! -path "*/__pycache__/*" | sort || true)
           
           if [ -z "${TEMPLATES}" ]; then
             echo "No CloudFormation templates found"
@@ -368,7 +372,7 @@ jobs:
       
       - name: Lint CloudFormation templates
         if: steps.find-templates.outputs.templates != ''
-        working-directory: ${{ inputs.working_directory }}
+        # Lint from repo root since templates are at root
         run: |
           echo "=== Linting CloudFormation Templates ==="
           
