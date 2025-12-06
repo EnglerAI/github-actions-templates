@@ -180,10 +180,35 @@ jobs:
       - name: Run tests with pytest
         working-directory: ${{ inputs.working_directory }}
         run: |
+          # Check for test files in tests/ directory
+          HAS_TESTS_DIR=false
           if [ -d "tests" ] && find tests -name "test_*.py" | grep -q .; then
+            HAS_TESTS_DIR=true
+          fi
+          
+          # Check for test files in current directory
+          HAS_CURRENT_DIR_TESTS=false
+          if find . -maxdepth 1 -name "test_*.py" | grep -q .; then
+            HAS_CURRENT_DIR_TESTS=true
+          fi
+          
+          if [ "$HAS_TESTS_DIR" = true ] || [ "$HAS_CURRENT_DIR_TESTS" = true ]; then
             echo "Running pytest with coverage..."
             
-            pytest tests/ -v \
+            # Determine pytest target based on where tests are found
+            if [ "$HAS_TESTS_DIR" = true ] && [ "$HAS_CURRENT_DIR_TESTS" = true ]; then
+              # Both locations have tests - run pytest on current directory (will find both)
+              PYTEST_TARGET="."
+            elif [ "$HAS_TESTS_DIR" = true ]; then
+              # Only tests/ directory has tests
+              PYTEST_TARGET="tests/"
+            else
+              # Only current directory has tests
+              PYTEST_TARGET="."
+            fi
+            
+            echo "Running pytest on: $PYTEST_TARGET"
+            pytest $PYTEST_TARGET -v \
               --cov=. \
               --cov-report=term-missing \
               --cov-report=xml \
