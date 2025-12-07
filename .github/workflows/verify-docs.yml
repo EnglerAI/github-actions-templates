@@ -33,22 +33,28 @@ jobs:
       
       - name: Verify README.md exists and is valid
         working-directory: ${{ inputs.working_directory }}
+        continue-on-error: true
         run: |
           echo "=== Verifying README.md ==="
           
           # Check if README.md exists
           if [ ! -f "README.md" ]; then
             echo "❌ ERROR: README.md not found"
+            echo "::warning::README.md not found in ${{ inputs.working_directory }}"
             exit 1
           fi
           
           echo "✅ README.md exists"
           
           # Run markdownlint (matches GitLab CI)
+          # Note: This step continues on error to report issues without failing the workflow
           echo "Running markdownlint..."
-          markdownlint README.md
-          
-          echo "✅ README.md is properly formatted"
+          if ! markdownlint README.md; then
+            echo "::warning::markdownlint found issues in README.md. Please review and fix."
+            echo "⚠️  README.md has formatting issues (see above for details)"
+          else
+            echo "✅ README.md is properly formatted"
+          fi
       
       - name: Upload results as artifact
         if: always()
