@@ -54,6 +54,14 @@ on:
         description: "Optional custom payload for smoke test (JSON string). If not provided, uses default generic payload."
         required: false
         type: string
+      security_group_id:
+        description: "Optional Security Group ID for Lambda VPC configuration"
+        required: false
+        type: string
+      subnet_ids:
+        description: "Optional comma-delimited Subnet IDs for Lambda VPC configuration"
+        required: false
+        type: string
     secrets:
       aws_role_arn:
         description: "AWS IAM role ARN for OIDC"
@@ -343,15 +351,20 @@ jobs:
             exit 1
           fi
 
+          # Build parameter overrides
+          PARAM_OVERRIDES="ARTIFACTSBUCKET=${{ env.s3_bucket }} S3Key=${{ env.s3_key }} ACCOUNTID=${{ secrets.aws_account_id }} NAME=${{ inputs.function_name }}"
+
+          # Add VPC parameters if provided
+          if [ -n "${{ inputs.security_group_id }}" ] && [ -n "${{ inputs.subnet_ids }}" ]; then
+            PARAM_OVERRIDES="${PARAM_OVERRIDES} SecurityGroupId=${{ inputs.security_group_id }} SubnetIds=${{ inputs.subnet_ids }}"
+            echo "VPC Configuration: SecurityGroup=${{ inputs.security_group_id }}, Subnets=${{ inputs.subnet_ids }}"
+          fi
+
           # Deploy using SAM (matches GitLab CI/CD approach)
           sam deploy \
             --template-file ${{ inputs.sam_template }} \
             --stack-name ${STACK_NAME} \
-            --parameter-overrides \
-              ARTIFACTSBUCKET=${{ env.s3_bucket }} \
-              S3Key=${{ env.s3_key }} \
-              ACCOUNTID=${{ secrets.aws_account_id }} \
-              NAME=${{ inputs.function_name }} \
+            --parameter-overrides ${PARAM_OVERRIDES} \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset \
             --region ${{ inputs.aws_region }}
