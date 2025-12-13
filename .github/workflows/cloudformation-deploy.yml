@@ -1,0 +1,267 @@
+name: CloudFormation Deploy
+
+on:
+  workflow_call:
+    inputs:
+      stack_name:
+        description: "CloudFormation stack name (required)"
+        required: true
+        type: string
+      environment:
+        description: "Target environment (dev/qat/stg/prd)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region"
+        required: true
+        type: string
+        default: "us-east-2"
+      template_file:
+        description: "Path to CloudFormation/SAM template file"
+        required: false
+        type: string
+        default: "template.yml"
+      parameter_overrides:
+        description: "Additional parameter overrides (space-separated KEY=VALUE pairs)"
+        required: false
+        type: string
+        default: ""
+      capabilities:
+        description: "CloudFormation capabilities (comma-separated, e.g., CAPABILITY_IAM,CAPABILITY_NAMED_IAM)"
+        required: false
+        type: string
+        default: "CAPABILITY_IAM"
+      verify_s3_permissions:
+        description: "Verify S3 permissions before deployment (recommended)"
+        required: false
+        type: boolean
+        default: true
+      kms_key_alias:
+        description: "KMS key alias for S3 encryption (if needed)"
+        required: false
+        type: string
+        default: "alias/CloudBotPipelineKey"
+    secrets:
+      aws_role_arn:
+        description: "AWS IAM role ARN for OIDC"
+        required: true
+      aws_account_id:
+        description: "AWS Account ID"
+        required: true
+      accountid:
+        description: "CloudBot Account ID (for ACCOUNTID parameter)"
+        required: false
+      security_group_id_dev:
+        description: "Optional Security Group ID for VPC configuration (DEV)"
+        required: false
+      security_group_id_prd:
+        description: "Optional Security Group ID for VPC configuration (PRD)"
+        required: false
+      subnet_ids_dev:
+        description: "Optional comma-delimited Subnet IDs for VPC configuration (DEV)"
+        required: false
+      subnet_ids_prd:
+        description: "Optional comma-delimited Subnet IDs for VPC configuration (PRD)"
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      stack_name: ${{ steps.deploy.outputs.stack_name }}
+    environment:
+      name: ${{ inputs.environment }}
+    permissions:
+      id-token: write # Required for OIDC
+      contents: read
+
+    steps:
+      - name: Debug - Check job context
+        run: |
+          echo "=== Deploy Job Debug Info ==="
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Stack Name: ${{ inputs.stack_name }}"
+          echo "AWS Region: ${{ inputs.aws_region }}"
+          echo "Template: ${{ inputs.template_file }}"
+          echo "GitHub Event: ${{ github.event_name }}"
+          echo "GitHub Ref: ${{ github.ref }}"
+          echo "Run ID: ${{ github.run_id }}"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions-cf-deploy
+
+      - name: Verify AWS Identity and Account
+        run: |
+          echo "=== AWS Identity Verification ==="
+
+          # Get full caller identity
+          IDENTITY=$(aws sts get-caller-identity)
+          echo "$IDENTITY"
+
+          # Extract account ID
+          ACTUAL_ACCOUNT=$(echo "$IDENTITY" | jq -r .Account)
+          ACTUAL_ARN=$(echo "$IDENTITY" | jq -r .Arn)
+
+          echo ""
+          echo "=== Identity Details ==="
+          echo "Actual Account ID: ${ACTUAL_ACCOUNT}"
+          echo "Expected Account ID: ${{ secrets.aws_account_id }}"
+          echo "Region: ${{ inputs.aws_region }}"
+
+          # Verify account matches
+          if [ "${ACTUAL_ACCOUNT}" != "${{ secrets.aws_account_id }}" ]; then
+            echo ""
+            echo "❌ ERROR: Account mismatch detected!"
+            echo "   Expected: ${{ secrets.aws_account_id }}"
+            echo "   Actual: ${ACTUAL_ACCOUNT}"
+            echo ""
+            echo "Fix: Update AWS_ACCOUNT_ID secret to match the role's account"
+            exit 1
+          fi
+
+          echo "✅ Authenticated to correct account: ${{ inputs.environment }}"
+
+      - name: Test S3 Permissions
+        if: inputs.verify_s3_permissions
+        run: |
+          echo "=== Testing S3 Permissions ==="
+
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${{ inputs.aws_region }}-${{ secrets.aws_account_id }}"
+          ACTUAL_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+
+          echo "Target Bucket: ${ARTIFACTS_BUCKET}"
+          echo "Authenticated Account: ${ACTUAL_ACCOUNT}"
+
+          # Verify bucket exists
+          echo ""
+          echo "1. Verifying bucket exists..."
+          if aws s3api head-bucket --bucket "${ARTIFACTS_BUCKET}" 2>&1; then
+            echo "✅ Bucket exists and is accessible"
+          else
+            echo "⚠️  Bucket doesn't exist or not accessible (may not be needed for this deployment)"
+          fi
+
+          echo ""
+          echo "2. Testing ListBucket..."
+          if aws s3 ls "s3://${ARTIFACTS_BUCKET}/" 2>&1; then
+            echo "✅ ListBucket succeeded"
+          else
+            echo "⚠️  ListBucket failed (may not be needed for this deployment)"
+          fi
+
+          echo ""
+          echo "✅ S3 permission tests completed"
+
+      - name: Install SAM CLI
+        run: |
+          echo "=== Installing SAM CLI ==="
+          pip install aws-sam-cli
+          sam --version
+
+      - name: Deploy with SAM
+        id: deploy
+        run: |
+          echo "=== Deploying CloudFormation Stack ==="
+
+          STACK_NAME="${{ inputs.stack_name }}"
+          TEMPLATE_FILE="${{ inputs.template_file }}"
+
+          echo "Stack Name: ${STACK_NAME}"
+          echo "Template: ${TEMPLATE_FILE}"
+
+          # Verify template exists
+          if [ ! -f "${TEMPLATE_FILE}" ]; then
+            echo "❌ Error: Template file not found: ${TEMPLATE_FILE}"
+            exit 1
+          fi
+
+          # Build base parameter overrides
+          # Use CloudBot accountid if provided, otherwise use AWS account ID
+          if [ -n "${{ secrets.accountid }}" ]; then
+            PARAM_OVERRIDES="ACCOUNTID=${{ secrets.accountid }}"
+          else
+            PARAM_OVERRIDES="ACCOUNTID=${{ secrets.aws_account_id }}"
+          fi
+
+          # Add VPC configuration if provided
+          ENV="${{ inputs.environment }}"
+          if [ "${ENV}" == "dev" ]; then
+            SECURITY_GROUP_ID="${{ secrets.security_group_id_dev }}"
+            SUBNET_IDS="${{ secrets.subnet_ids_dev }}"
+          elif [ "${ENV}" == "prd" ]; then
+            SECURITY_GROUP_ID="${{ secrets.security_group_id_prd }}"
+            SUBNET_IDS="${{ secrets.subnet_ids_prd }}"
+          else
+            SECURITY_GROUP_ID=""
+            SUBNET_IDS=""
+          fi
+
+          # Add VPC parameters if provided
+          if [ -n "${SECURITY_GROUP_ID}" ] && [ -n "${SUBNET_IDS}" ]; then
+            PARAM_OVERRIDES="${PARAM_OVERRIDES} SecurityGroupId=${SECURITY_GROUP_ID} SubnetIds=${SUBNET_IDS}"
+            echo "VPC Configuration: SecurityGroup=${SECURITY_GROUP_ID}, Subnets=${SUBNET_IDS}"
+          fi
+
+          # Add additional parameter overrides if provided
+          if [ -n "${{ inputs.parameter_overrides }}" ]; then
+            PARAM_OVERRIDES="${PARAM_OVERRIDES} ${{ inputs.parameter_overrides }}"
+            echo "Additional parameters: ${{ inputs.parameter_overrides }}"
+          fi
+
+          # Parse capabilities
+          CAPABILITIES="${{ inputs.capabilities }}"
+          CAPABILITY_ARGS=""
+          IFS=',' read -ra CAP_ARRAY <<< "${CAPABILITIES}"
+          for cap in "${CAP_ARRAY[@]}"; do
+            CAPABILITY_ARGS="${CAPABILITY_ARGS} --capabilities ${cap}"
+          done
+
+          echo ""
+          echo "=== Deployment Parameters ==="
+          echo "Stack Name: ${STACK_NAME}"
+          echo "Template: ${TEMPLATE_FILE}"
+          echo "Parameters: ${PARAM_OVERRIDES}"
+          echo "Capabilities: ${CAPABILITIES}"
+          echo ""
+
+          # Deploy using SAM (works for both SAM and plain CloudFormation templates)
+          sam deploy \
+            --template-file ${TEMPLATE_FILE} \
+            --stack-name ${STACK_NAME} \
+            --parameter-overrides ${PARAM_OVERRIDES} \
+            ${CAPABILITY_ARGS} \
+            --no-fail-on-empty-changeset \
+            --region ${{ inputs.aws_region }}
+
+          echo "stack_name=${STACK_NAME}" >> $GITHUB_OUTPUT
+          echo "✅ CloudFormation deployment completed"
+
+      - name: Get stack info
+        run: |
+          echo "=== CloudFormation Stack Info ==="
+
+          STACK_NAME="${{ inputs.stack_name }}"
+
+          # Get stack status
+          aws cloudformation describe-stacks \
+            --stack-name ${STACK_NAME} \
+            --region ${{ inputs.aws_region }} \
+            --query 'Stacks[0].{Status:StackStatus,Outputs:Outputs}' \
+            --output table
+
+          echo ""
+          echo "=== Stack Outputs ==="
+          aws cloudformation describe-stacks \
+            --stack-name ${STACK_NAME} \
+            --region ${{ inputs.aws_region }} \
+            --query 'Stacks[0].Outputs' \
+            --output json | jq .
+
+          echo "✅ Deployment verified"
