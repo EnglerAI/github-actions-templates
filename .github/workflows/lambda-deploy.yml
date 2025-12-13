@@ -54,14 +54,6 @@ on:
         description: "Optional custom payload for smoke test (JSON string). If not provided, uses default generic payload."
         required: false
         type: string
-      security_group_id:
-        description: "Optional Security Group ID for Lambda VPC configuration"
-        required: false
-        type: string
-      subnet_ids:
-        description: "Optional comma-delimited Subnet IDs for Lambda VPC configuration"
-        required: false
-        type: string
     secrets:
       aws_role_arn:
         description: "AWS IAM role ARN for OIDC"
@@ -69,6 +61,18 @@ on:
       aws_account_id:
         description: "AWS Account ID"
         required: true
+      security_group_id_dev:
+        description: "Optional Security Group ID for Lambda VPC configuration (DEV)"
+        required: false
+      security_group_id_prd:
+        description: "Optional Security Group ID for Lambda VPC configuration (PRD)"
+        required: false
+      subnet_ids_dev:
+        description: "Optional comma-delimited Subnet IDs for Lambda VPC configuration (DEV)"
+        required: false
+      subnet_ids_prd:
+        description: "Optional comma-delimited Subnet IDs for Lambda VPC configuration (PRD)"
+        required: false
       gitlab_api_token:
         description: "GitLab API token for private packages"
         required: false
@@ -354,10 +358,25 @@ jobs:
           # Build parameter overrides
           PARAM_OVERRIDES="ARTIFACTSBUCKET=${{ env.s3_bucket }} S3Key=${{ env.s3_key }} ACCOUNTID=${{ secrets.aws_account_id }} NAME=${{ inputs.function_name }}"
 
+          # Select VPC configuration based on environment
+          ENV="${{ inputs.environment }}"
+          if [ "${ENV}" == "dev" ]; then
+            SECURITY_GROUP_ID="${{ secrets.security_group_id_dev }}"
+            SUBNET_IDS="${{ secrets.subnet_ids_dev }}"
+          elif [ "${ENV}" == "prd" ]; then
+            SECURITY_GROUP_ID="${{ secrets.security_group_id_prd }}"
+            SUBNET_IDS="${{ secrets.subnet_ids_prd }}"
+          else
+            SECURITY_GROUP_ID=""
+            SUBNET_IDS=""
+          fi
+
           # Add VPC parameters if provided
-          if [ -n "${{ inputs.security_group_id }}" ] && [ -n "${{ inputs.subnet_ids }}" ]; then
-            PARAM_OVERRIDES="${PARAM_OVERRIDES} SecurityGroupId=${{ inputs.security_group_id }} SubnetIds=${{ inputs.subnet_ids }}"
-            echo "VPC Configuration: SecurityGroup=${{ inputs.security_group_id }}, Subnets=${{ inputs.subnet_ids }}"
+          if [ -n "${SECURITY_GROUP_ID}" ] && [ -n "${SUBNET_IDS}" ]; then
+            PARAM_OVERRIDES="${PARAM_OVERRIDES} SecurityGroupId=${SECURITY_GROUP_ID} SubnetIds=${SUBNET_IDS}"
+            echo "VPC Configuration: SecurityGroup=${SECURITY_GROUP_ID}, Subnets=${SUBNET_IDS}"
+          else
+            echo "No VPC configuration provided - deploying without VPC"
           fi
 
           # Deploy using SAM (matches GitLab CI/CD approach)
