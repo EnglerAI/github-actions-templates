@@ -16,7 +16,22 @@ on:
 jobs:
   verify:
     runs-on: ${{ inputs.runner || 'self-hosted' }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      HOME: ${{ github.workspace }}/.home
     steps:
+      - name: Configure Git (for self-hosted runners)
+        run: |
+          # Create writable HOME directory
+          mkdir -p "$HOME"
+          # Configure git with the new HOME
+          git config --global --add safe.directory '*' || true
+          git config --global user.name "GitHub Actions" || true
+          git config --global user.email "actions@github.com" || true
+        continue-on-error: true
+
       - name: Checkout code
         uses: actions/checkout@v4
 

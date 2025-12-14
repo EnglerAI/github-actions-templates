@@ -63,7 +63,17 @@ on:
 jobs:
   package:
     runs-on: ${{ inputs.runner || 'self-hosted' }}
+    env:
+      HOME: ${{ github.workspace }}/.home
     steps:
+      - name: Configure Git (for self-hosted runners)
+        run: |
+          mkdir -p "$HOME"
+          git config --global --add safe.directory '*' || true
+          git config --global user.name "GitHub Actions" || true
+          git config --global user.email "actions@github.com" || true
+        continue-on-error: true
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -154,8 +164,18 @@ jobs:
     permissions:
       id-token: write # Required for OIDC
       contents: read
+    env:
+      HOME: ${{ github.workspace }}/.home
 
     steps:
+      - name: Configure Git (for self-hosted runners)
+        run: |
+          mkdir -p "$HOME"
+          git config --global --add safe.directory '*' || true
+          git config --global user.name "GitHub Actions" || true
+          git config --global user.email "actions@github.com" || true
+        continue-on-error: true
+
       - name: Checkout code
         uses: actions/checkout@v4
 
