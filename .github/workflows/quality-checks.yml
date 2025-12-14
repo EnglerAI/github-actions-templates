@@ -188,6 +188,9 @@ jobs:
       - name: Install dependencies
         working-directory: ${{ inputs.working_directory }}
         run: |
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
           # Use python3 if python doesn't work, fallback to python
           if command -v python3 &> /dev/null && python3 -m pip --version &>/dev/null; then
             PYTHON_CMD="python3"
@@ -201,43 +204,81 @@ jobs:
           # Create virtual environment to avoid externally-managed-environment error
           VENV_DIR="$HOME/venv"
           echo "Creating virtual environment at $VENV_DIR..."
-          $PYTHON_CMD -m venv "$VENV_DIR" || $PYTHON_CMD -m venv --without-pip "$VENV_DIR" || {
-            echo "Warning: venv module not available, trying virtualenv..."
-            $PYTHON_CMD -m pip install --user virtualenv || true
-            if command -v virtualenv &> /dev/null || [ -f "$HOME/.local/bin/virtualenv" ]; then
-              virtualenv "$VENV_DIR" || "$HOME/.local/bin/virtualenv" "$VENV_DIR" || true
-            fi
-          }
 
-          # Activate virtual environment
-          if [ -f "$VENV_DIR/bin/activate" ]; then
+          # Try to create venv with pip first
+          if $PYTHON_CMD -m venv "$VENV_DIR" 2>/dev/null; then
+            echo "Virtual environment created with pip"
+          # If that fails, try without pip and install pip manually
+          elif $PYTHON_CMD -m venv --without-pip "$VENV_DIR" 2>/dev/null; then
+            echo "Virtual environment created without pip, installing pip..."
+            # Install pip in the venv using get-pip.py
+            /usr/bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || /bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || true
+            if [ -f /tmp/get-pip.py ] && [ -f "$VENV_DIR/bin/python" ]; then
+              "$VENV_DIR/bin/python" /tmp/get-pip.py 2>&1 || true
+              /bin/rm -f /tmp/get-pip.py
+            fi
+          # If venv module doesn't work, try installing python3-venv
+          else
+            echo "venv module not available, trying to install python3-venv..."
+            if command -v /usr/bin/apt-get &> /dev/null; then
+              sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y python3-venv || true
+              # Try again after installing python3-venv
+              if $PYTHON_CMD -m venv "$VENV_DIR" 2>/dev/null; then
+                echo "Virtual environment created after installing python3-venv"
+              elif $PYTHON_CMD -m venv --without-pip "$VENV_DIR" 2>/dev/null; then
+                echo "Virtual environment created without pip, installing pip..."
+                /usr/bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || /bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || true
+                if [ -f /tmp/get-pip.py ] && [ -f "$VENV_DIR/bin/python" ]; then
+                  "$VENV_DIR/bin/python" /tmp/get-pip.py 2>&1 || true
+                  /bin/rm -f /tmp/get-pip.py
+                fi
+              fi
+            fi
+          fi
+
+          # Activate virtual environment if it exists and has pip
+          if [ -f "$VENV_DIR/bin/activate" ] && [ -f "$VENV_DIR/bin/pip" ]; then
             source "$VENV_DIR/bin/activate"
             echo "$VENV_DIR/bin" >> $GITHUB_PATH
             export PATH="$VENV_DIR/bin:$PATH"
-            echo "Virtual environment activated"
+            echo "Virtual environment activated with pip"
+            PIP_CMD="pip"
+          elif [ -f "$VENV_DIR/bin/activate" ]; then
+            # Venv exists but no pip - try to use system pip with --user
+            echo "Warning: Virtual environment created but pip not available, using --user flag"
+            export PATH="$HOME/.local/bin:$PATH"
+            echo "$HOME/.local/bin" >> $GITHUB_PATH
+            PIP_CMD="$PYTHON_CMD -m pip"
+            PIP_FLAG="--user"
           else
             echo "Warning: Virtual environment not created, using --user flag as fallback"
             export PATH="$HOME/.local/bin:$PATH"
             echo "$HOME/.local/bin" >> $GITHUB_PATH
+            PIP_CMD="$PYTHON_CMD -m pip"
+            PIP_FLAG="--user"
           fi
 
           # Upgrade pip in the environment
-          $PYTHON_CMD -m pip install --upgrade pip || pip install --upgrade pip || true
+          if [ "$PIP_CMD" = "pip" ]; then
+            pip install --upgrade pip || true
+          else
+            $PIP_CMD install $PIP_FLAG --upgrade pip || true
+          fi
 
           if [ -f "${{ inputs.requirements_file }}" ]; then
             # Handle GitLab private packages if token provided
             if [ -n "${{ secrets.gitlab_api_token }}" ]; then
               echo "Installing with GitLab private package access..."
-              pip install \
+              $PIP_CMD install $PIP_FLAG \
                 --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
                 -r ${{ inputs.requirements_file }}
             else
-              pip install -r ${{ inputs.requirements_file }}
+              $PIP_CMD install $PIP_FLAG -r ${{ inputs.requirements_file }}
             fi
           fi
 
           # Install linting tools (matches GitLab CI)
-          pip install flake8 flake8-docstrings
+          $PIP_CMD install $PIP_FLAG flake8 flake8-docstrings
 
       - name: Run flake8 (code)
         working-directory: ${{ inputs.working_directory }}
