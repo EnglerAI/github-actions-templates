@@ -190,30 +190,34 @@ jobs:
         run: |
           # Use python3 if python doesn't work, fallback to python
           if command -v python3 &> /dev/null && python3 -m pip --version &>/dev/null; then
-            python3 -m pip install --upgrade pip
+            python3 -m pip install --upgrade pip --user
             PYTHON_CMD="python3"
           elif command -v python &> /dev/null && python -m pip --version &>/dev/null; then
-            python -m pip install --upgrade pip
+            python -m pip install --upgrade pip --user
             PYTHON_CMD="python"
           else
             echo "Error: Neither python nor python3 with pip is available"
             exit 1
           fi
 
+          # Ensure ~/.local/bin is in PATH for user-installed packages
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
           if [ -f "${{ inputs.requirements_file }}" ]; then
             # Handle GitLab private packages if token provided
             if [ -n "${{ secrets.gitlab_api_token }}" ]; then
               echo "Installing with GitLab private package access..."
-              $PYTHON_CMD -m pip install \
+              $PYTHON_CMD -m pip install --user \
                 --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
                 -r ${{ inputs.requirements_file }}
             else
-              $PYTHON_CMD -m pip install -r ${{ inputs.requirements_file }}
+              $PYTHON_CMD -m pip install --user -r ${{ inputs.requirements_file }}
             fi
           fi
 
           # Install linting tools (matches GitLab CI)
-          $PYTHON_CMD -m pip install flake8 flake8-docstrings
+          $PYTHON_CMD -m pip install --user flake8 flake8-docstrings
 
       - name: Run flake8 (code)
         working-directory: ${{ inputs.working_directory }}
@@ -432,7 +436,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip --user
+
+          # Ensure ~/.local/bin is in PATH for user-installed packages
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
           # Install project dependencies from requirements.txt first
           # This ensures actual packages (like pymysql, requests, etc.) are installed
@@ -455,11 +463,11 @@ jobs:
             echo "Installing dependencies from: $REQ_FILE"
             # Handle GitLab private packages if token provided
             if [ -n "${{ secrets.gitlab_api_token }}" ]; then
-              pip install \
+              pip install --user \
                 --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
                 -r "$REQ_FILE"
             else
-              pip install -r "$REQ_FILE"
+              pip install --user -r "$REQ_FILE"
             fi
           else
             echo "⚠️  Requirements file not found: $REQ_FILE"
@@ -476,8 +484,8 @@ jobs:
           echo "=========================================="
           # Install all mypy dependencies including pymysql and types-PyMySQL
           # Installing pymysql explicitly ensures it's available even if not in requirements.txt
-          echo "Running: pip install pymysql types-PyMySQL awscli lxml mypy boto3-stubs types-beautifulsoup4 types-python-dateutil types-requests"
-          pip install pymysql types-PyMySQL awscli lxml mypy boto3-stubs types-beautifulsoup4 types-python-dateutil types-requests
+          echo "Running: pip install --user pymysql types-PyMySQL awscli lxml mypy boto3-stubs types-beautifulsoup4 types-python-dateutil types-requests"
+          pip install --user pymysql types-PyMySQL awscli lxml mypy boto3-stubs types-beautifulsoup4 types-python-dateutil types-requests
           echo "=========================================="
           echo "Type stubs installation completed"
           echo "=========================================="
@@ -589,7 +597,10 @@ jobs:
       - name: Install cfn-lint
         run: |
           echo "=== Installing cfn-lint ==="
-          pip install cfn-lint junit-xml
+          # Ensure ~/.local/bin is in PATH for user-installed packages
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          pip install --user cfn-lint junit-xml
           cfn-lint --version
 
       - name: Find CloudFormation templates
