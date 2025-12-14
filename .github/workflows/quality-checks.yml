@@ -4,77 +4,82 @@ on:
   workflow_call:
     inputs:
       python_version:
-        description: 'Python version'
+        description: "Python version"
         required: false
         type: string
-        default: '3.12'
+        default: "3.12"
       requirements_file:
-        description: 'Path to requirements.txt'
+        description: "Path to requirements.txt"
         required: false
         type: string
-        default: 'requirements.txt'
+        default: "requirements.txt"
       working_directory:
-        description: 'Working directory'
+        description: "Working directory"
         required: false
         type: string
-        default: '.'
+        default: "."
       run_flake8:
-        description: 'Run flake8 linting'
+        description: "Run flake8 linting"
         required: false
         type: boolean
         default: true
       run_mypy:
-        description: 'Run mypy type checking'
+        description: "Run mypy type checking"
         required: false
         type: boolean
         default: true
       run_cfn_lint:
-        description: 'Run CloudFormation/SAM template linting'
+        description: "Run CloudFormation/SAM template linting"
         required: false
         type: boolean
         default: true
       upload_reports:
-        description: 'Upload reports to S3 (requires AWS credentials)'
+        description: "Upload reports to S3 (requires AWS credentials)"
         required: false
         type: boolean
         default: false
       account_id:
-        description: 'CloudBot Account ID for S3 uploads (overrides secret)'
+        description: "CloudBot Account ID for S3 uploads (overrides secret)"
         required: false
         type: string
     secrets:
       gitlab_api_token:
-        description: 'GitLab API token for private packages'
+        description: "GitLab API token for private packages"
         required: false
       aws_role_arn:
-        description: 'AWS IAM role ARN for S3 uploads'
+        description: "AWS IAM role ARN for S3 uploads"
         required: false
       aws_account_id:
-        description: 'AWS Account ID (for AWS operations, not S3 paths)'
+        description: "AWS Account ID (for AWS operations, not S3 paths)"
         required: false
       accountid:
-        description: 'CloudBot Account ID for S3 upload paths'
+        description: "CloudBot Account ID for S3 upload paths"
         required: false
+      runner:
+        description: "Runner label (default: self-hosted)"
+        required: false
+        type: string
+        default: "self-hosted"
 
 jobs:
   flake8:
     if: inputs.run_flake8
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.python_version }}
-          cache: 'pip'
-      
+          cache: "pip"
+
       - name: Install dependencies
         working-directory: ${{ inputs.working_directory }}
         run: |
           python -m pip install --upgrade pip
-          
+
           if [ -f "${{ inputs.requirements_file }}" ]; then
             # Handle GitLab private packages if token provided
             if [ -n "${{ secrets.gitlab_api_token }}" ]; then
@@ -86,10 +91,10 @@ jobs:
               pip install -r ${{ inputs.requirements_file }}
             fi
           fi
-          
+
           # Install linting tools (matches GitLab CI)
           pip install flake8 flake8-docstrings
-      
+
       - name: Run flake8 (code)
         working-directory: ${{ inputs.working_directory }}
         run: |
@@ -101,7 +106,7 @@ jobs:
             --output-file=flakereport.txt \
             --tee \
             --exit-zero || exit 1
-      
+
       - name: Run flake8 (tests)
         working-directory: ${{ inputs.working_directory }}
         run: |
@@ -113,7 +118,7 @@ jobs:
             --output-file=flaketestreport.txt \
             --tee \
             --exit-zero || exit 1
-      
+
       - name: Run flake8 (docs - code)
         working-directory: ${{ inputs.working_directory }}
         run: |
@@ -125,7 +130,7 @@ jobs:
             --output-file=flakedocsreport.txt \
             --tee \
             --exit-zero || exit 1
-      
+
       - name: Run flake8 (docs - tests)
         working-directory: ${{ inputs.working_directory }}
         run: |
@@ -136,7 +141,7 @@ jobs:
             --output-file=flakedocstestreport.txt \
             --tee \
             --exit-zero || exit 1
-      
+
       - name: Configure AWS for S3 upload
         if: inputs.upload_reports
         uses: aws-actions/configure-aws-credentials@v4
@@ -144,7 +149,7 @@ jobs:
           role-to-assume: ${{ secrets.aws_role_arn }}
           aws-region: us-east-2
           role-session-name: github-actions-quality-checks
-      
+
       - name: Upload flake8 reports to S3
         if: inputs.upload_reports
         run: |
@@ -158,7 +163,7 @@ jobs:
             exit 0
           fi
           REPORTS_BUCKET="cloudbot-reporting-v2"
-          
+
           for report in flakereport flaketestreport flakedocsreport flakedocstestreport; do
             if [ -f "${{ inputs.working_directory }}/${report}.txt" ]; then
               echo "Uploading ${report}.txt to S3..."
@@ -168,7 +173,7 @@ jobs:
             fi
           done
         shell: bash
-      
+
       - name: Upload reports as artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -183,27 +188,27 @@ jobs:
 
   mypy:
     if: inputs.run_mypy
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.python_version }}
-          cache: 'pip'
-      
+          cache: "pip"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          
+
           # Install project dependencies from requirements.txt first
           # This ensures actual packages (like pymysql, requests, etc.) are installed
           # before we install type stubs, matching GitLab CI behavior
           # Note: Resolve requirements_file path from repo root
           REQ_FILE="${{ inputs.requirements_file }}"
-          
+
           # If requirements_file path is relative to working_directory (starts with ../),
           # resolve it relative to repo root instead
           if [[ "$REQ_FILE" == ../* ]]; then
@@ -211,7 +216,7 @@ jobs:
             REQ_FILE="${REQ_FILE#../}"
             echo "Resolved requirements file path: $REQ_FILE (from repo root)"
           fi
-          
+
           # Check if requirements file exists (from repo root)
           echo "Looking for requirements file: $REQ_FILE"
           if [ -f "$REQ_FILE" ]; then
@@ -231,7 +236,7 @@ jobs:
             echo "Listing files in repo root:"
             ls -la || true
           fi
-          
+
           # Install mypy and type stubs (matches GitLab CI exactly)
           # Note: Actual packages (pymysql, requests, etc.) should be in requirements.txt
           # Type stubs provide type information for mypy but require the actual packages
@@ -245,18 +250,18 @@ jobs:
           echo "=========================================="
           echo "Type stubs installation completed"
           echo "=========================================="
-          
+
           # Verify pymysql and types-PyMySQL are installed (for debugging)
           echo "=== Verifying installed packages ==="
           pip show pymysql && echo "✅ pymysql is installed" || echo "⚠️  pymysql not installed"
           pip show types-PyMySQL && echo "✅ types-PyMySQL is installed" || echo "⚠️  types-PyMySQL not installed"
           echo "=== Installed packages containing 'mysql' or 'mypy' ==="
           pip list | grep -iE "(mysql|mypy)" || echo "No matching packages found"
-          
+
           # Verify Python can import pymysql (tests the installation)
           echo "=== Testing pymysql import ==="
           python -c "import pymysql; print(f'✅ pymysql imported successfully: {pymysql.__version__}')" || echo "⚠️  Failed to import pymysql"
-      
+
       - name: Run mypy
         working-directory: ${{ inputs.working_directory }}
         run: |
@@ -266,7 +271,7 @@ jobs:
           python -c "import sys; print('\n'.join(sys.path))"
           echo "Verifying pymysql and types-PyMySQL before mypy run:"
           pip show pymysql types-PyMySQL || echo "Packages not found"
-          
+
           # Matches GitLab: --exclude 'test_.*.py$' --install-types --non-interactive --strict
           # Note: --install-types should auto-install missing stubs, but we've already installed them
           mypy . \
@@ -281,11 +286,11 @@ jobs:
             --explicit-package-bases \
             --junit-xml mypy.xml \
             --xml-report . || MYPY_EXIT_STATUS=$?
-          
+
           echo "mypy exit status: ${MYPY_EXIT_STATUS:-0}"
           # Don't fail on mypy errors (matches GitLab behavior)
         continue-on-error: true
-      
+
       - name: Configure AWS for S3 upload
         if: inputs.upload_reports
         uses: aws-actions/configure-aws-credentials@v4
@@ -293,7 +298,7 @@ jobs:
           role-to-assume: ${{ secrets.aws_role_arn }}
           aws-region: us-east-2
           role-session-name: github-actions-quality-checks
-      
+
       - name: Upload mypy reports to S3
         if: inputs.upload_reports && always()
         run: |
@@ -307,14 +312,14 @@ jobs:
             exit 0
           fi
           REPORTS_BUCKET="cloudbot-reporting-v2"
-          
+
           if [ -f "${{ inputs.working_directory }}/mypy.xml" ]; then
             echo "Uploading mypy.xml to S3..."
             aws s3 cp "${{ inputs.working_directory }}/mypy.xml" \
               "s3://${REPORTS_BUCKET}/incoming/${ACCOUNTID}/${PROJECT_NAME}/${DATETIME}-mypy.xml" \
               --region us-east-2 || echo "Warning: Failed to upload mypy.xml"
           fi
-          
+
           if [ -f "${{ inputs.working_directory }}/index.xml" ]; then
             echo "Uploading index.xml to S3..."
             aws s3 cp "${{ inputs.working_directory }}/index.xml" \
@@ -322,7 +327,7 @@ jobs:
               --region us-east-2 || echo "Warning: Failed to upload index.xml"
           fi
         shell: bash
-      
+
       - name: Upload reports as artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -335,30 +340,30 @@ jobs:
 
   cfn-lint:
     if: inputs.run_cfn_lint
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Install cfn-lint
         run: |
           echo "=== Installing cfn-lint ==="
           pip install cfn-lint junit-xml
           cfn-lint --version
-      
+
       - name: Find CloudFormation templates
         id: find-templates
         # Search from repo root, not working_directory, since templates are typically at root
         run: |
           echo "=== Finding CloudFormation/SAM Templates ==="
-          
+
           # Find all template files from repository root
           # Look for files with "template", "cloudformation", or "sam" in the name
           # Also check for common CloudFormation/SAM file patterns
           TEMPLATES=$(find . -type f \( -name "*.yml" -o -name "*.yaml" \) \
             \( -iname "*template*" -o -iname "*cloudformation*" -o -iname "*sam*" -o -name "template.yml" -o -name "template.yaml" -o -name "sam.yml" -o -name "sam.yaml" \) \
             ! -path "*/node_modules/*" ! -path "*/.git/*" ! -path "*/__pycache__/*" | sort || true)
-          
+
           if [ -z "${TEMPLATES}" ]; then
             echo "No CloudFormation templates found"
             echo "templates=" >> $GITHUB_OUTPUT
@@ -369,13 +374,13 @@ jobs:
             echo "${TEMPLATES}" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
           fi
-      
+
       - name: Lint CloudFormation templates
         if: steps.find-templates.outputs.templates != ''
         # Lint from repo root since templates are at root
         run: |
           echo "=== Linting CloudFormation Templates ==="
-          
+
           # Read templates from output and generate JUnit XML reports
           echo "${{ steps.find-templates.outputs.templates }}" | while read -r template; do
             if [ -n "${template}" ] && [ -f "${template}" ]; then
@@ -388,18 +393,18 @@ jobs:
             fi
           done
         continue-on-error: true
-      
+
       - name: Combine cfn-lint reports
         if: steps.find-templates.outputs.templates != ''
         run: |
           echo "=== Combining cfn-lint Results ==="
-          
+
           # Combine all cfn-lint JUnit XML results into one file
           python3 << 'PYTHON_SCRIPT'
           import xml.etree.ElementTree as ET
           import glob
           import os
-          
+
           # Create root test suite
           root_suite = ET.Element('testsuite')
           root_suite.set('name', 'cfn-lint-combined')
@@ -407,12 +412,12 @@ jobs:
           root_suite.set('failures', '0')
           root_suite.set('errors', '0')
           root_suite.set('time', '0.0')
-          
+
           total_tests = 0
           total_failures = 0
           total_errors = 0
           total_time = 0.0
-          
+
           # Process each cfn-lint XML file
           for xml_file in glob.glob('*-cfnlint.xml'):
               try:
@@ -445,19 +450,19 @@ jobs:
               
               except Exception as e:
                   print(f'Error processing {xml_file}: {e}')
-          
+
           # Update root suite attributes
           root_suite.set('tests', str(total_tests))
           root_suite.set('failures', str(total_failures))
           root_suite.set('errors', str(total_errors))
           root_suite.set('time', str(total_time))
-          
+
           # Write combined results
           tree = ET.ElementTree(root_suite)
           tree.write('cfnlint.xml', encoding='utf-8', xml_declaration=True)
           print(f'Combined {total_tests} tests, {total_failures} failures, {total_errors} errors')
           PYTHON_SCRIPT
-      
+
       - name: Configure AWS for S3 upload
         if: inputs.upload_reports && steps.find-templates.outputs.templates != ''
         uses: aws-actions/configure-aws-credentials@v4
@@ -465,7 +470,7 @@ jobs:
           role-to-assume: ${{ secrets.aws_role_arn }}
           aws-region: us-east-2
           role-session-name: github-actions-cfn-lint
-      
+
       - name: Upload cfn-lint reports to S3
         if: inputs.upload_reports && steps.find-templates.outputs.templates != ''
         run: |
@@ -479,7 +484,7 @@ jobs:
             exit 0
           fi
           REPORTS_BUCKET="cloudbot-reporting-v2"
-          
+
           if [ -f "cfnlint.xml" ]; then
             echo "Uploading cfnlint.xml to S3..."
             aws s3 cp "cfnlint.xml" \
@@ -487,7 +492,7 @@ jobs:
               --region us-east-2 || echo "Warning: Failed to upload cfnlint.xml"
           fi
         shell: bash
-      
+
       - name: Upload lint results as artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -498,4 +503,3 @@ jobs:
             *-cfnlint.xml
           if-no-files-found: ignore
           retention-days: 7
-

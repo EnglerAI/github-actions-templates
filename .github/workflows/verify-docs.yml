@@ -4,48 +4,53 @@ on:
   workflow_call:
     inputs:
       working_directory:
-        description: 'Working directory'
+        description: "Working directory"
         required: false
         type: string
-        default: '.'
+        default: "."
+      runner:
+        description: "Runner label (default: self-hosted)"
+        required: false
+        type: string
+        default: "self-hosted"
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      
+          node-version: "20"
+
       - name: Install markdownlint
         run: |
           echo "=== Installing markdownlint ==="
-          
+
           # Install markdownlint-cli globally (matches GitLab CI)
           npm install -g markdownlint-cli
-          
+
           # Verify installation
           markdownlint --version
-      
+
       - name: Verify README.md exists and is valid
         working-directory: ${{ inputs.working_directory }}
         continue-on-error: true
         run: |
           echo "=== Verifying README.md ==="
-          
+
           # Check if README.md exists
           if [ ! -f "README.md" ]; then
             echo "❌ ERROR: README.md not found"
             echo "::warning::README.md not found in ${{ inputs.working_directory }}"
             exit 1
           fi
-          
+
           echo "✅ README.md exists"
-          
+
           # Run markdownlint (matches GitLab CI)
           # Note: This step continues on error to report issues without failing the workflow
           echo "Running markdownlint..."
@@ -55,7 +60,7 @@ jobs:
           else
             echo "✅ README.md is properly formatted"
           fi
-      
+
       - name: Upload results as artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -64,4 +69,3 @@ jobs:
           path: ${{ inputs.working_directory }}/README.md
           if-no-files-found: ignore
           retention-days: 7
-

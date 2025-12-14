@@ -55,10 +55,15 @@ on:
       gitlab_api_token:
         description: "GitLab API token for private packages"
         required: false
+      runner:
+        description: "Runner label (default: self-hosted)"
+        required: false
+        type: string
+        default: "self-hosted"
 
 jobs:
   package:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -72,24 +77,24 @@ jobs:
       - name: Package Lambda Layer
         run: |
           echo "=== Packaging Lambda Layer ==="
-          
+
           # Lambda Layers require the code in a specific directory structure
           # For Python layers, code must be in the specified directory (default: 'python')
           LAYER_DIR="${{ inputs.layer_code_directory }}"
-          
+
           if [ ! -d "${LAYER_DIR}" ]; then
             echo "❌ Error: '${LAYER_DIR}' directory not found"
             echo "Lambda Layers require code in a '${LAYER_DIR}' directory"
             exit 1
           fi
-          
+
           # Create layer package directory
           mkdir -p layer-package
-          
+
           # Copy layer code directory to layer-package
           echo "Copying ${LAYER_DIR} directory to layer package..."
           cp -r "${LAYER_DIR}" layer-package/
-          
+
           # Install any dependencies if requirements file exists
           REQ_FILE="${{ inputs.requirements_file }}"
           if [ -f "${LAYER_DIR}/requirements.txt" ]; then
@@ -117,13 +122,13 @@ jobs:
           else
             echo "No requirements.txt found, skipping dependency installation"
           fi
-          
+
           # Create ZIP archive for the layer
           echo "Creating layer ZIP archive..."
           cd layer-package
           zip -r ../layer.zip . -x "*.pyc" -x "*__pycache__*" -x "*.git*" -x "*.pytest_cache*"
           cd ..
-          
+
           # Show package size
           ls -lh layer.zip
           echo "✅ Lambda layer package created: $(du -h layer.zip | cut -f1)"
@@ -140,7 +145,7 @@ jobs:
     if: |
       always() && 
       (needs.package.result == 'success')
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     outputs:
       stack_name: ${{ steps.deploy.outputs.stack_name }}
       layer_arn: ${{ steps.deploy.outputs.layer_arn }}
@@ -170,36 +175,36 @@ jobs:
       - name: Upload layer package to S3
         run: |
           echo "=== Uploading Layer Package to S3 ==="
-          
+
           # S3 bucket for artifacts (matches GitLab CI/CD approach)
           ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${{ inputs.aws_region }}-${{ secrets.aws_account_id }}"
           S3_KEY="lambda-packages/${{ inputs.layer_name }}/layer-${{ github.sha }}.zip"
-          
+
           echo "Bucket: ${ARTIFACTS_BUCKET}"
           echo "Key: ${S3_KEY}"
-          
+
           # Upload to S3 with KMS encryption (required by bucket policy)
           aws s3 cp layer.zip "s3://${ARTIFACTS_BUCKET}/${S3_KEY}" \
             --sse aws:kms \
             --sse-kms-key-id ${{ inputs.kms_key_alias }} \
             --region ${{ inputs.aws_region }}
-          
+
           echo "s3_bucket=${ARTIFACTS_BUCKET}" >> $GITHUB_ENV
           echo "s3_key=${S3_KEY}" >> $GITHUB_ENV
-          
+
           echo "✅ Layer package uploaded to S3 with KMS encryption"
 
       - name: Check existing resources
         run: |
           echo "=== Checking Existing Resources ==="
-          
+
           # Determine stack name
           if [ -n "${{ inputs.stack_name }}" ]; then
             STACK_NAME="${{ inputs.stack_name }}"
           else
             STACK_NAME="${{ inputs.layer_name }}-stack"
           fi
-          
+
           # Check if stack exists
           if aws cloudformation describe-stacks --stack-name ${STACK_NAME} --region ${{ inputs.aws_region }} &>/dev/null; then
             echo "✅ Stack '${STACK_NAME}' exists - will be updated"
@@ -211,7 +216,7 @@ jobs:
           else
             echo "ℹ️  Stack '${STACK_NAME}' does not exist - will be created"
           fi
-          
+
           # Check if SSM parameter exists (if layer_name-latest pattern is used)
           SSM_PARAM_NAME="${{ inputs.layer_name }}-latest"
           if aws ssm get-parameter --name "${SSM_PARAM_NAME}" --region ${{ inputs.aws_region }} &>/dev/null 2>&1; then
@@ -236,23 +241,23 @@ jobs:
         id: deploy
         run: |
           echo "=== Deploying Lambda Layer with SAM ==="
-          
+
           # Determine stack name
           if [ -n "${{ inputs.stack_name }}" ]; then
             STACK_NAME="${{ inputs.stack_name }}"
           else
             STACK_NAME="${{ inputs.layer_name }}-stack"
           fi
-          
+
           echo "Stack Name: ${STACK_NAME}"
           echo "Template: ${{ inputs.sam_template }}"
-          
+
           # Verify template exists
           if [ ! -f "${{ inputs.sam_template }}" ]; then
             echo "❌ Error: SAM template not found: ${{ inputs.sam_template }}"
             exit 1
           fi
-          
+
           # Deploy using SAM (matches GitLab CI/CD approach)
           sam deploy \
             --template-file ${{ inputs.sam_template }} \
@@ -265,7 +270,7 @@ jobs:
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset \
             --region ${{ inputs.aws_region }}
-          
+
           echo "stack_name=${STACK_NAME}" >> $GITHUB_ENV
           echo "✅ SAM deployment completed"
 
@@ -273,16 +278,16 @@ jobs:
         id: layer
         run: |
           echo "=== Getting Layer Version ARN ==="
-          
+
           STACK_NAME="${{ env.stack_name }}"
-          
+
           # Get layer ARN from CloudFormation stack outputs
           LAYER_ARN=$(aws cloudformation describe-stacks \
             --stack-name ${STACK_NAME} \
             --region ${{ inputs.aws_region }} \
             --query 'Stacks[0].Outputs[?OutputKey==`LayerVersionArn`].OutputValue' \
             --output text 2>/dev/null || echo "")
-          
+
           if [ -z "${LAYER_ARN}" ]; then
             # Try to get from SSM parameter (as defined in template)
             SSM_PARAM_NAME="${{ inputs.layer_name }}-latest"
@@ -292,7 +297,7 @@ jobs:
               --query 'Parameter.Value' \
               --output text 2>/dev/null || echo "")
           fi
-          
+
           if [ -n "${LAYER_ARN}" ]; then
             echo "Layer Version ARN: ${LAYER_ARN}"
             echo "layer_arn=${LAYER_ARN}" >> $GITHUB_OUTPUT
@@ -303,19 +308,14 @@ jobs:
       - name: Verify deployment
         run: |
           echo "=== Verifying Layer Deployment ==="
-          
+
           STACK_NAME="${{ env.stack_name }}"
-          
+
           # Get stack status
           aws cloudformation describe-stacks \
             --stack-name ${STACK_NAME} \
             --region ${{ inputs.aws_region }} \
             --query 'Stacks[0].{StackName:StackName,StackStatus:StackStatus}' \
             --output table
-          
+
           echo "✅ Layer deployment verified"
-
-
-
-
-

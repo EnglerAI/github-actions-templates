@@ -63,10 +63,15 @@ on:
       subnet_ids_prd:
         description: "Optional comma-delimited Subnet IDs for VPC configuration (PRD)"
         required: false
+      runner:
+        description: "Runner label (default: self-hosted)"
+        required: false
+        type: string
+        default: "self-hosted"
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     outputs:
       stack_name: ${{ steps.deploy.outputs.stack_name }}
     environment:
