@@ -52,19 +52,25 @@ jobs:
             rm -rf /tmp/node-v${NODE_VERSION}-linux-x64 /tmp/node.tar.gz
           fi
 
-          # Ensure execute permissions on all binaries
+          # Ensure execute permissions on all binaries and scripts
           find "$NODE_DIR/bin" -type f -exec chmod +x {} \; 2>/dev/null || true
+          chmod +x "$NODE_DIR/bin/node" "$NODE_DIR/bin/npm" "$NODE_DIR/bin/npx" 2>/dev/null || true
 
           # Add to PATH for subsequent steps
           echo "$NODE_DIR/bin" >> $GITHUB_PATH
 
-          # Verify installation using full path
+          # Export PATH for current step so npm can find node
+          export PATH="$NODE_DIR/bin:$PATH"
+
+          # Verify installation
           echo "Node.js version:"
           "$NODE_DIR/bin/node" --version
           echo "npm version:"
+          # npm's shebang needs node in PATH
           "$NODE_DIR/bin/npm" --version
         env:
           HOME: ${{ github.workspace }}/.home
+          PATH: ${{ github.workspace }}/.home/nodejs/bin:$PATH
 
       - name: Install markdownlint
         run: |
