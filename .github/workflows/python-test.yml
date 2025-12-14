@@ -32,6 +32,10 @@ on:
         description: "CloudBot Account ID for S3 uploads (overrides secret)"
         required: false
         type: string
+      runner:
+        description: "Runner label (default: self-hosted)"
+        required: false
+        type: string
     secrets:
       gitlab_api_token:
         description: "GitLab API token for private packages"
@@ -45,10 +49,6 @@ on:
       accountid:
         description: "CloudBot Account ID for S3 upload paths"
         required: false
-      runner:
-        description: "Runner label (default: self-hosted)"
-        required: false
-        type: string
 
 jobs:
   lint:

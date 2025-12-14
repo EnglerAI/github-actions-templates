@@ -45,6 +45,10 @@ on:
         required: false
         type: string
         default: "alias/CloudBotPipelineKey"
+      runner:
+        description: "Runner label (default: self-hosted)"
+        required: false
+        type: string
     secrets:
       aws_role_arn:
         description: "AWS IAM role ARN for OIDC"
@@ -55,10 +59,6 @@ on:
       gitlab_api_token:
         description: "GitLab API token for private packages"
         required: false
-      runner:
-        description: "Runner label (default: self-hosted)"
-        required: false
-        type: string
 
 jobs:
   package:
