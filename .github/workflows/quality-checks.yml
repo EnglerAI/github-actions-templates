@@ -190,34 +190,54 @@ jobs:
         run: |
           # Use python3 if python doesn't work, fallback to python
           if command -v python3 &> /dev/null && python3 -m pip --version &>/dev/null; then
-            python3 -m pip install --upgrade pip --user
             PYTHON_CMD="python3"
           elif command -v python &> /dev/null && python -m pip --version &>/dev/null; then
-            python -m pip install --upgrade pip --user
             PYTHON_CMD="python"
           else
             echo "Error: Neither python nor python3 with pip is available"
             exit 1
           fi
 
-          # Ensure ~/.local/bin is in PATH for user-installed packages
-          export PATH="$HOME/.local/bin:$PATH"
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          # Create virtual environment to avoid externally-managed-environment error
+          VENV_DIR="$HOME/venv"
+          echo "Creating virtual environment at $VENV_DIR..."
+          $PYTHON_CMD -m venv "$VENV_DIR" || $PYTHON_CMD -m venv --without-pip "$VENV_DIR" || {
+            echo "Warning: venv module not available, trying virtualenv..."
+            $PYTHON_CMD -m pip install --user virtualenv || true
+            if command -v virtualenv &> /dev/null || [ -f "$HOME/.local/bin/virtualenv" ]; then
+              virtualenv "$VENV_DIR" || "$HOME/.local/bin/virtualenv" "$VENV_DIR" || true
+            fi
+          }
+
+          # Activate virtual environment
+          if [ -f "$VENV_DIR/bin/activate" ]; then
+            source "$VENV_DIR/bin/activate"
+            echo "$VENV_DIR/bin" >> $GITHUB_PATH
+            export PATH="$VENV_DIR/bin:$PATH"
+            echo "Virtual environment activated"
+          else
+            echo "Warning: Virtual environment not created, using --user flag as fallback"
+            export PATH="$HOME/.local/bin:$PATH"
+            echo "$HOME/.local/bin" >> $GITHUB_PATH
+          fi
+
+          # Upgrade pip in the environment
+          $PYTHON_CMD -m pip install --upgrade pip || pip install --upgrade pip || true
 
           if [ -f "${{ inputs.requirements_file }}" ]; then
             # Handle GitLab private packages if token provided
             if [ -n "${{ secrets.gitlab_api_token }}" ]; then
               echo "Installing with GitLab private package access..."
-              $PYTHON_CMD -m pip install --user \
+              pip install \
                 --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
                 -r ${{ inputs.requirements_file }}
             else
-              $PYTHON_CMD -m pip install --user -r ${{ inputs.requirements_file }}
+              pip install -r ${{ inputs.requirements_file }}
             fi
           fi
 
           # Install linting tools (matches GitLab CI)
-          $PYTHON_CMD -m pip install --user flake8 flake8-docstrings
+          pip install flake8 flake8-docstrings
 
       - name: Run flake8 (code)
         working-directory: ${{ inputs.working_directory }}
