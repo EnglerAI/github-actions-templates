@@ -99,11 +99,67 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ inputs.python_version }}
-          cache: "pip"
+      - name: Setup Python (for self-hosted runners)
+        run: |
+          # Use system Python or install if needed
+          PYTHON_VERSION="${{ inputs.python_version }}"
+          PYTHON_MAJOR_MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f1,2)
+
+          # Check if system Python matches version
+          if command -v python${PYTHON_MAJOR_MINOR} &> /dev/null; then
+            echo "Using system Python ${PYTHON_MAJOR_MINOR}"
+            echo "python${PYTHON_MAJOR_MINOR}" >> $GITHUB_PATH
+            python${PYTHON_MAJOR_MINOR} --version
+          elif command -v python3 &> /dev/null; then
+            # Check if system python3 matches
+            SYSTEM_VERSION=$(python3 --version 2>&1 | grep -oP '\d+\.\d+' | head -1)
+            if [ "$SYSTEM_VERSION" = "$PYTHON_MAJOR_MINOR" ]; then
+              echo "Using system Python3 (version ${SYSTEM_VERSION})"
+              echo "python3" >> $GITHUB_PATH
+              python3 --version
+            else
+              echo "System Python3 version (${SYSTEM_VERSION}) doesn't match required (${PYTHON_MAJOR_MINOR}), using system Python3 anyway"
+              echo "python3" >> $GITHUB_PATH
+              python3 --version
+            fi
+          else
+            echo "Python not found, attempting to install Python ${PYTHON_VERSION}..."
+            # Install Python manually (simplified - assumes system package manager or downloads from source)
+            # For now, try to use available package manager
+            if command -v apt-get &> /dev/null; then
+              sudo apt-get update && sudo apt-get install -y python${PYTHON_MAJOR_MINOR} python${PYTHON_MAJOR_MINOR}-pip || true
+            elif command -v yum &> /dev/null; then
+              sudo yum install -y python${PYTHON_MAJOR_MINOR} python${PYTHON_MAJOR_MINOR}-pip || true
+            fi
+            # Try to use installed version
+            if command -v python${PYTHON_MAJOR_MINOR} &> /dev/null; then
+              echo "python${PYTHON_MAJOR_MINOR}" >> $GITHUB_PATH
+            elif command -v python3 &> /dev/null; then
+              echo "python3" >> $GITHUB_PATH
+            else
+              echo "Failed to install Python, using 'python' as fallback"
+              echo "python" >> $GITHUB_PATH
+            fi
+          fi
+
+          # Ensure pip is available and 'python' command exists
+          PYTHON_CMD=""
+          if command -v python${PYTHON_MAJOR_MINOR} &> /dev/null; then
+            PYTHON_CMD="python${PYTHON_MAJOR_MINOR}"
+            python${PYTHON_MAJOR_MINOR} -m pip --version || python${PYTHON_MAJOR_MINOR} -m ensurepip --upgrade || true
+          elif command -v python3 &> /dev/null; then
+            PYTHON_CMD="python3"
+            python3 -m pip --version || python3 -m ensurepip --upgrade || true
+          fi
+
+          # Create 'python' symlink if it doesn't exist
+          if [ -n "$PYTHON_CMD" ] && ! command -v python &> /dev/null; then
+            mkdir -p "$HOME/bin"
+            ln -sf $(which $PYTHON_CMD) "$HOME/bin/python"
+            echo "$HOME/bin" >> $GITHUB_PATH
+          fi
+        env:
+          HOME: ${{ github.workspace }}/.home
 
       - name: Install dependencies
         run: |
@@ -142,11 +198,67 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ inputs.python_version }}
-          cache: "pip"
+      - name: Setup Python (for self-hosted runners)
+        run: |
+          # Use system Python or install if needed
+          PYTHON_VERSION="${{ inputs.python_version }}"
+          PYTHON_MAJOR_MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f1,2)
+
+          # Check if system Python matches version
+          if command -v python${PYTHON_MAJOR_MINOR} &> /dev/null; then
+            echo "Using system Python ${PYTHON_MAJOR_MINOR}"
+            echo "python${PYTHON_MAJOR_MINOR}" >> $GITHUB_PATH
+            python${PYTHON_MAJOR_MINOR} --version
+          elif command -v python3 &> /dev/null; then
+            # Check if system python3 matches
+            SYSTEM_VERSION=$(python3 --version 2>&1 | grep -oP '\d+\.\d+' | head -1)
+            if [ "$SYSTEM_VERSION" = "$PYTHON_MAJOR_MINOR" ]; then
+              echo "Using system Python3 (version ${SYSTEM_VERSION})"
+              echo "python3" >> $GITHUB_PATH
+              python3 --version
+            else
+              echo "System Python3 version (${SYSTEM_VERSION}) doesn't match required (${PYTHON_MAJOR_MINOR}), using system Python3 anyway"
+              echo "python3" >> $GITHUB_PATH
+              python3 --version
+            fi
+          else
+            echo "Python not found, attempting to install Python ${PYTHON_VERSION}..."
+            # Install Python manually (simplified - assumes system package manager or downloads from source)
+            # For now, try to use available package manager
+            if command -v apt-get &> /dev/null; then
+              sudo apt-get update && sudo apt-get install -y python${PYTHON_MAJOR_MINOR} python${PYTHON_MAJOR_MINOR}-pip || true
+            elif command -v yum &> /dev/null; then
+              sudo yum install -y python${PYTHON_MAJOR_MINOR} python${PYTHON_MAJOR_MINOR}-pip || true
+            fi
+            # Try to use installed version
+            if command -v python${PYTHON_MAJOR_MINOR} &> /dev/null; then
+              echo "python${PYTHON_MAJOR_MINOR}" >> $GITHUB_PATH
+            elif command -v python3 &> /dev/null; then
+              echo "python3" >> $GITHUB_PATH
+            else
+              echo "Failed to install Python, using 'python' as fallback"
+              echo "python" >> $GITHUB_PATH
+            fi
+          fi
+
+          # Ensure pip is available and 'python' command exists
+          PYTHON_CMD=""
+          if command -v python${PYTHON_MAJOR_MINOR} &> /dev/null; then
+            PYTHON_CMD="python${PYTHON_MAJOR_MINOR}"
+            python${PYTHON_MAJOR_MINOR} -m pip --version || python${PYTHON_MAJOR_MINOR} -m ensurepip --upgrade || true
+          elif command -v python3 &> /dev/null; then
+            PYTHON_CMD="python3"
+            python3 -m pip --version || python3 -m ensurepip --upgrade || true
+          fi
+
+          # Create 'python' symlink if it doesn't exist
+          if [ -n "$PYTHON_CMD" ] && ! command -v python &> /dev/null; then
+            mkdir -p "$HOME/bin"
+            ln -sf $(which $PYTHON_CMD) "$HOME/bin/python"
+            echo "$HOME/bin" >> $GITHUB_PATH
+          fi
+        env:
+          HOME: ${{ github.workspace }}/.home
 
       - name: Package Lambda function
         run: |
