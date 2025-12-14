@@ -38,23 +38,26 @@ jobs:
 
       - name: Setup Node.js (for self-hosted runners)
         run: |
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
           # Install Node.js in a writable location
           NODE_VERSION="20.19.6"
           NODE_DIR="$HOME/nodejs"
-          mkdir -p "$NODE_DIR"
+          /bin/mkdir -p "$NODE_DIR"
 
           # Download and extract Node.js
           if [ ! -f "$NODE_DIR/bin/node" ]; then
             echo "Downloading Node.js ${NODE_VERSION}..."
-            curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" -o /tmp/node.tar.gz
-            tar -xzf /tmp/node.tar.gz -C /tmp
-            mv /tmp/node-v${NODE_VERSION}-linux-x64/* "$NODE_DIR/"
-            rm -rf /tmp/node-v${NODE_VERSION}-linux-x64 /tmp/node.tar.gz
+            /usr/bin/curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" -o /tmp/node.tar.gz
+            /bin/tar -xzf /tmp/node.tar.gz -C /tmp
+            /bin/mv /tmp/node-v${NODE_VERSION}-linux-x64/* "$NODE_DIR/"
+            /bin/rm -rf /tmp/node-v${NODE_VERSION}-linux-x64 /tmp/node.tar.gz
           fi
 
           # Ensure execute permissions on all binaries and scripts
-          find "$NODE_DIR/bin" -type f -exec chmod +x {} \; 2>/dev/null || true
-          chmod +x "$NODE_DIR/bin/node" "$NODE_DIR/bin/npm" "$NODE_DIR/bin/npx" 2>/dev/null || true
+          /usr/bin/find "$NODE_DIR/bin" -type f -exec /bin/chmod +x {} \; 2>/dev/null || true
+          /bin/chmod +x "$NODE_DIR/bin/node" "$NODE_DIR/bin/npm" "$NODE_DIR/bin/npx" 2>/dev/null || true
 
           # Add to PATH for subsequent steps
           echo "$NODE_DIR/bin" >> $GITHUB_PATH
@@ -70,7 +73,6 @@ jobs:
           "$NODE_DIR/bin/npm" --version
         env:
           HOME: ${{ github.workspace }}/.home
-          PATH: ${{ github.workspace }}/.home/nodejs/bin:$PATH
 
       - name: Install markdownlint
         run: |
