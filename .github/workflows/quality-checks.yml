@@ -497,11 +497,82 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip --user
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
-          # Ensure ~/.local/bin is in PATH for user-installed packages
-          export PATH="$HOME/.local/bin:$PATH"
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          # Use python3 if python doesn't work, fallback to python
+          if command -v python3 &> /dev/null && python3 -m pip --version &>/dev/null; then
+            PYTHON_CMD="python3"
+          elif command -v python &> /dev/null && python -m pip --version &>/dev/null; then
+            PYTHON_CMD="python"
+          else
+            echo "Error: Neither python nor python3 with pip is available"
+            exit 1
+          fi
+
+          # Create virtual environment to avoid externally-managed-environment error
+          VENV_DIR="$HOME/venv"
+          echo "Creating virtual environment at $VENV_DIR..."
+
+          # Try to create venv with pip first
+          if $PYTHON_CMD -m venv "$VENV_DIR" 2>/dev/null; then
+            echo "Virtual environment created with pip"
+          # If that fails, try without pip and install pip manually
+          elif $PYTHON_CMD -m venv --without-pip "$VENV_DIR" 2>/dev/null; then
+            echo "Virtual environment created without pip, installing pip..."
+            # Install pip in the venv using get-pip.py
+            /usr/bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || /bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || true
+            if [ -f /tmp/get-pip.py ] && [ -f "$VENV_DIR/bin/python" ]; then
+              "$VENV_DIR/bin/python" /tmp/get-pip.py 2>&1 || true
+              /bin/rm -f /tmp/get-pip.py
+            fi
+          # If venv module doesn't work, try installing python3-venv
+          else
+            echo "venv module not available, trying to install python3-venv..."
+            if command -v /usr/bin/apt-get &> /dev/null; then
+              sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y python3-venv || true
+              # Try again after installing python3-venv
+              if $PYTHON_CMD -m venv "$VENV_DIR" 2>/dev/null; then
+                echo "Virtual environment created after installing python3-venv"
+              elif $PYTHON_CMD -m venv --without-pip "$VENV_DIR" 2>/dev/null; then
+                echo "Virtual environment created without pip, installing pip..."
+                /usr/bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || /bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || true
+                if [ -f /tmp/get-pip.py ] && [ -f "$VENV_DIR/bin/python" ]; then
+                  "$VENV_DIR/bin/python" /tmp/get-pip.py 2>&1 || true
+                  /bin/rm -f /tmp/get-pip.py
+                fi
+              fi
+            fi
+          fi
+
+          # Activate virtual environment if it exists and has pip
+          if [ -f "$VENV_DIR/bin/activate" ] && [ -f "$VENV_DIR/bin/pip" ]; then
+            source "$VENV_DIR/bin/activate"
+            echo "$VENV_DIR/bin" >> $GITHUB_PATH
+            export PATH="$VENV_DIR/bin:$PATH"
+            echo "Virtual environment activated with pip"
+            PIP_CMD="pip"
+          elif [ -f "$VENV_DIR/bin/activate" ]; then
+            # Venv exists but no pip - try to use system pip with --user
+            echo "Warning: Virtual environment created but pip not available, using --user flag"
+            export PATH="$HOME/.local/bin:$PATH"
+            echo "$HOME/.local/bin" >> $GITHUB_PATH
+            PIP_CMD="$PYTHON_CMD -m pip"
+            PIP_FLAG="--user"
+          else
+            echo "Warning: Virtual environment not created, using --user flag as fallback"
+            export PATH="$HOME/.local/bin:$PATH"
+            echo "$HOME/.local/bin" >> $GITHUB_PATH
+            PIP_CMD="$PYTHON_CMD -m pip"
+            PIP_FLAG="--user"
+          fi
+
+          # Upgrade pip in the environment
+          if [ "$PIP_CMD" = "pip" ]; then
+            pip install --upgrade pip || true
+          else
+            $PIP_CMD install $PIP_FLAG --upgrade pip || true
+          fi
 
           # Install project dependencies from requirements.txt first
           # This ensures actual packages (like pymysql, requests, etc.) are installed
@@ -524,11 +595,11 @@ jobs:
             echo "Installing dependencies from: $REQ_FILE"
             # Handle GitLab private packages if token provided
             if [ -n "${{ secrets.gitlab_api_token }}" ]; then
-              pip install --user \
+              $PIP_CMD install $PIP_FLAG \
                 --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
                 -r "$REQ_FILE"
             else
-              pip install --user -r "$REQ_FILE"
+              $PIP_CMD install $PIP_FLAG -r "$REQ_FILE"
             fi
           else
             echo "⚠️  Requirements file not found: $REQ_FILE"
@@ -545,8 +616,8 @@ jobs:
           echo "=========================================="
           # Install all mypy dependencies including pymysql and types-PyMySQL
           # Installing pymysql explicitly ensures it's available even if not in requirements.txt
-          echo "Running: pip install --user pymysql types-PyMySQL awscli lxml mypy boto3-stubs types-beautifulsoup4 types-python-dateutil types-requests"
-          pip install --user pymysql types-PyMySQL awscli lxml mypy boto3-stubs types-beautifulsoup4 types-python-dateutil types-requests
+          echo "Running: $PIP_CMD install $PIP_FLAG pymysql types-PyMySQL awscli lxml mypy boto3-stubs types-beautifulsoup4 types-python-dateutil types-requests"
+          $PIP_CMD install $PIP_FLAG pymysql types-PyMySQL awscli lxml mypy boto3-stubs types-beautifulsoup4 types-python-dateutil types-requests
           echo "=========================================="
           echo "Type stubs installation completed"
           echo "=========================================="
@@ -658,10 +729,78 @@ jobs:
       - name: Install cfn-lint
         run: |
           echo "=== Installing cfn-lint ==="
-          # Ensure ~/.local/bin is in PATH for user-installed packages
-          export PATH="$HOME/.local/bin:$PATH"
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          pip install --user cfn-lint junit-xml
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
+          # Use python3 if python doesn't work, fallback to python
+          if command -v python3 &> /dev/null && python3 -m pip --version &>/dev/null; then
+            PYTHON_CMD="python3"
+          elif command -v python &> /dev/null && python -m pip --version &>/dev/null; then
+            PYTHON_CMD="python"
+          else
+            echo "Error: Neither python nor python3 with pip is available"
+            exit 1
+          fi
+
+          # Create virtual environment to avoid externally-managed-environment error
+          VENV_DIR="$HOME/venv"
+          echo "Creating virtual environment at $VENV_DIR..."
+
+          # Try to create venv with pip first
+          if $PYTHON_CMD -m venv "$VENV_DIR" 2>/dev/null; then
+            echo "Virtual environment created with pip"
+          # If that fails, try without pip and install pip manually
+          elif $PYTHON_CMD -m venv --without-pip "$VENV_DIR" 2>/dev/null; then
+            echo "Virtual environment created without pip, installing pip..."
+            # Install pip in the venv using get-pip.py
+            /usr/bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || /bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || true
+            if [ -f /tmp/get-pip.py ] && [ -f "$VENV_DIR/bin/python" ]; then
+              "$VENV_DIR/bin/python" /tmp/get-pip.py 2>&1 || true
+              /bin/rm -f /tmp/get-pip.py
+            fi
+          # If venv module doesn't work, try installing python3-venv
+          else
+            echo "venv module not available, trying to install python3-venv..."
+            if command -v /usr/bin/apt-get &> /dev/null; then
+              sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y python3-venv || true
+              # Try again after installing python3-venv
+              if $PYTHON_CMD -m venv "$VENV_DIR" 2>/dev/null; then
+                echo "Virtual environment created after installing python3-venv"
+              elif $PYTHON_CMD -m venv --without-pip "$VENV_DIR" 2>/dev/null; then
+                echo "Virtual environment created without pip, installing pip..."
+                /usr/bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || /bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || true
+                if [ -f /tmp/get-pip.py ] && [ -f "$VENV_DIR/bin/python" ]; then
+                  "$VENV_DIR/bin/python" /tmp/get-pip.py 2>&1 || true
+                  /bin/rm -f /tmp/get-pip.py
+                fi
+              fi
+            fi
+          fi
+
+          # Activate virtual environment if it exists and has pip
+          if [ -f "$VENV_DIR/bin/activate" ] && [ -f "$VENV_DIR/bin/pip" ]; then
+            source "$VENV_DIR/bin/activate"
+            echo "$VENV_DIR/bin" >> $GITHUB_PATH
+            export PATH="$VENV_DIR/bin:$PATH"
+            echo "Virtual environment activated with pip"
+            PIP_CMD="pip"
+          elif [ -f "$VENV_DIR/bin/activate" ]; then
+            # Venv exists but no pip - try to use system pip with --user
+            echo "Warning: Virtual environment created but pip not available, using --user flag"
+            export PATH="$HOME/.local/bin:$PATH"
+            echo "$HOME/.local/bin" >> $GITHUB_PATH
+            PIP_CMD="$PYTHON_CMD -m pip"
+            PIP_FLAG="--user"
+          else
+            echo "Warning: Virtual environment not created, using --user flag as fallback"
+            export PATH="$HOME/.local/bin:$PATH"
+            echo "$HOME/.local/bin" >> $GITHUB_PATH
+            PIP_CMD="$PYTHON_CMD -m pip"
+            PIP_FLAG="--user"
+          fi
+
+          # Install cfn-lint
+          $PIP_CMD install $PIP_FLAG cfn-lint junit-xml
           cfn-lint --version
 
       - name: Find CloudFormation templates
