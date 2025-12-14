@@ -143,22 +143,32 @@ jobs:
       - name: Install dependencies
         working-directory: ${{ inputs.working_directory }}
         run: |
-          python -m pip install --upgrade pip
+          # Use python3 if python doesn't work, fallback to python
+          if command -v python3 &> /dev/null && python3 -m pip --version &>/dev/null; then
+            python3 -m pip install --upgrade pip
+            PYTHON_CMD="python3"
+          elif command -v python &> /dev/null && python -m pip --version &>/dev/null; then
+            python -m pip install --upgrade pip
+            PYTHON_CMD="python"
+          else
+            echo "Error: Neither python nor python3 with pip is available"
+            exit 1
+          fi
 
           if [ -f "${{ inputs.requirements_file }}" ]; then
             # Handle GitLab private packages if token provided
             if [ -n "${{ secrets.gitlab_api_token }}" ]; then
               echo "Installing with GitLab private package access..."
-              pip install \
+              $PYTHON_CMD -m pip install \
                 --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
                 -r ${{ inputs.requirements_file }}
             else
-              pip install -r ${{ inputs.requirements_file }}
+              $PYTHON_CMD -m pip install -r ${{ inputs.requirements_file }}
             fi
           fi
 
           # Install linting tools (matches GitLab CI)
-          pip install flake8 flake8-docstrings
+          $PYTHON_CMD -m pip install flake8 flake8-docstrings
 
       - name: Run flake8 (code)
         working-directory: ${{ inputs.working_directory }}

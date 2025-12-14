@@ -21,6 +21,7 @@ jobs:
         shell: bash
     env:
       HOME: ${{ github.workspace }}/.home
+      NODE_DIR: ${{ github.workspace }}/.home/nodejs
     steps:
       - name: Configure Git (for self-hosted runners)
         run: |
@@ -51,8 +52,13 @@ jobs:
             rm -rf /tmp/node-v${NODE_VERSION}-linux-x64 /tmp/node.tar.gz
           fi
 
-          # Add to PATH
+          # Ensure execute permissions on all binaries
+          find "$NODE_DIR/bin" -type f -exec chmod +x {} \; 2>/dev/null || true
+
+          # Add to PATH for subsequent steps
           echo "$NODE_DIR/bin" >> $GITHUB_PATH
+
+          # Verify installation using full path
           echo "Node.js version:"
           "$NODE_DIR/bin/node" --version
           echo "npm version:"
