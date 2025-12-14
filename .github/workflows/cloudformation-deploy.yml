@@ -67,11 +67,10 @@ on:
         description: "Runner label (default: self-hosted)"
         required: false
         type: string
-        default: "self-hosted"
 
 jobs:
   deploy:
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     outputs:
       stack_name: ${{ steps.deploy.outputs.stack_name }}
     environment:

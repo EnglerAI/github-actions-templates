@@ -40,11 +40,10 @@ on:
         description: "Runner label (default: self-hosted)"
         required: false
         type: string
-        default: "self-hosted"
 
 jobs:
   analyze:
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

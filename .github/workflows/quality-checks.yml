@@ -42,6 +42,10 @@ on:
         description: "CloudBot Account ID for S3 uploads (overrides secret)"
         required: false
         type: string
+      runner:
+        description: "Runner label (default: self-hosted)"
+        required: false
+        type: string
     secrets:
       gitlab_api_token:
         description: "GitLab API token for private packages"
@@ -55,16 +59,11 @@ on:
       accountid:
         description: "CloudBot Account ID for S3 upload paths"
         required: false
-      runner:
-        description: "Runner label (default: self-hosted)"
-        required: false
-        type: string
-        default: "self-hosted"
 
 jobs:
   flake8:
     if: inputs.run_flake8
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -188,7 +187,7 @@ jobs:
 
   mypy:
     if: inputs.run_mypy
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -340,7 +339,7 @@ jobs:
 
   cfn-lint:
     if: inputs.run_cfn_lint
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

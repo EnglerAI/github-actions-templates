@@ -59,12 +59,11 @@ on:
         description: "Runner label (default: self-hosted)"
         required: false
         type: string
-        default: "self-hosted"
 
 jobs:
   bandit:
     if: inputs.run_bandit
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -141,7 +140,7 @@ jobs:
 
   checkov:
     if: inputs.run_checkov
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -209,7 +208,7 @@ jobs:
 
   radon:
     if: inputs.run_radon
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

@@ -80,12 +80,11 @@ on:
         description: "Runner label (default: self-hosted)"
         required: false
         type: string
-        default: "self-hosted"
 
 jobs:
   test:
     if: inputs.run_tests
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -118,7 +117,7 @@ jobs:
     if: |
       always() && 
       (needs.test.result == 'success' || needs.test.result == 'skipped')
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -190,7 +189,7 @@ jobs:
     if: |
       always() && 
       (needs.package.result == 'success')
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     outputs:
       stack_name: ${{ steps.deploy.outputs.stack_name }}
       function_name: ${{ steps.deploy.outputs.function_name }}
@@ -433,7 +432,7 @@ jobs:
     if: |
       always() && 
       (needs.deploy.result == 'success')
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     permissions:
       id-token: write
       contents: read

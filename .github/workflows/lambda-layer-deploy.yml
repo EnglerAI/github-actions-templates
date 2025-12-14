@@ -59,11 +59,10 @@ on:
         description: "Runner label (default: self-hosted)"
         required: false
         type: string
-        default: "self-hosted"
 
 jobs:
   package:
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -145,7 +144,7 @@ jobs:
     if: |
       always() && 
       (needs.package.result == 'success')
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     outputs:
       stack_name: ${{ steps.deploy.outputs.stack_name }}
       layer_arn: ${{ steps.deploy.outputs.layer_arn }}
