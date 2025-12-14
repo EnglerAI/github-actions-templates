@@ -26,6 +26,10 @@ on:
         required: false
         type: string
         default: "alias/CloudBotPipelineKey"
+      runner:
+        description: "Runner label (default: self-hosted)"
+        required: false
+        type: string
     secrets:
       aws_role_arn:
         description: "AWS IAM role ARN for S3 uploads"
@@ -36,10 +40,6 @@ on:
       accountid:
         description: "CloudBot Account ID for S3 upload paths"
         required: false
-      runner:
-        description: "Runner label (default: self-hosted)"
-        required: false
-        type: string
 
 jobs:
   analyze:
