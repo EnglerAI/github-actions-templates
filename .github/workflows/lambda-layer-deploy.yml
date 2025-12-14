@@ -79,63 +79,82 @@ jobs:
 
       - name: Setup Python (for self-hosted runners)
         run: |
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
           # Use system Python or install if needed
           PYTHON_VERSION="${{ inputs.python_version }}"
           PYTHON_MAJOR_MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f1,2)
 
-          # Check if system Python matches version
-          if command -v python${PYTHON_MAJOR_MINOR} &> /dev/null; then
-            echo "Using system Python ${PYTHON_MAJOR_MINOR}"
-            echo "python${PYTHON_MAJOR_MINOR}" >> $GITHUB_PATH
-            python${PYTHON_MAJOR_MINOR} --version
-          elif command -v python3 &> /dev/null; then
-            # Check if system python3 matches
-            SYSTEM_VERSION=$(python3 --version 2>&1 | grep -oP '\d+\.\d+' | head -1)
-            if [ "$SYSTEM_VERSION" = "$PYTHON_MAJOR_MINOR" ]; then
-              echo "Using system Python3 (version ${SYSTEM_VERSION})"
-              echo "python3" >> $GITHUB_PATH
-              python3 --version
-            else
-              echo "System Python3 version (${SYSTEM_VERSION}) doesn't match required (${PYTHON_MAJOR_MINOR}), using system Python3 anyway"
-              echo "python3" >> $GITHUB_PATH
-              python3 --version
-            fi
-          else
-            echo "Python not found, attempting to install Python ${PYTHON_VERSION}..."
-            # Install Python manually (simplified - assumes system package manager or downloads from source)
-            # For now, try to use available package manager
-            if command -v apt-get &> /dev/null; then
-              sudo apt-get update && sudo apt-get install -y python${PYTHON_MAJOR_MINOR} python${PYTHON_MAJOR_MINOR}-pip || true
-            elif command -v yum &> /dev/null; then
-              sudo yum install -y python${PYTHON_MAJOR_MINOR} python${PYTHON_MAJOR_MINOR}-pip || true
-            fi
-            # Try to use installed version
-            if command -v python${PYTHON_MAJOR_MINOR} &> /dev/null; then
-              echo "python${PYTHON_MAJOR_MINOR}" >> $GITHUB_PATH
-            elif command -v python3 &> /dev/null; then
-              echo "python3" >> $GITHUB_PATH
-            else
-              echo "Failed to install Python, using 'python' as fallback"
-              echo "python" >> $GITHUB_PATH
-            fi
-          fi
-
-          # Ensure pip is available and 'python' command exists
+          # Find available Python
           PYTHON_CMD=""
           if command -v python${PYTHON_MAJOR_MINOR} &> /dev/null; then
             PYTHON_CMD="python${PYTHON_MAJOR_MINOR}"
-            python${PYTHON_MAJOR_MINOR} -m pip --version || python${PYTHON_MAJOR_MINOR} -m ensurepip --upgrade || true
+            echo "Using system Python ${PYTHON_MAJOR_MINOR}"
+            $PYTHON_CMD --version
           elif command -v python3 &> /dev/null; then
             PYTHON_CMD="python3"
-            python3 -m pip --version || python3 -m ensurepip --upgrade || true
+            SYSTEM_VERSION=$($PYTHON_CMD --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+            echo "Using system Python3 (version ${SYSTEM_VERSION})"
+            $PYTHON_CMD --version
+          else
+            echo "Python not found, attempting to install..."
+            if command -v /usr/bin/apt-get &> /dev/null; then
+              sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y python3 python3-pip || true
+            elif command -v /usr/bin/yum &> /dev/null; then
+              sudo /usr/bin/yum install -y python3 python3-pip || true
+            fi
+            if command -v python3 &> /dev/null; then
+              PYTHON_CMD="python3"
+              $PYTHON_CMD --version
+            else
+              echo "Error: Could not find or install Python"
+              exit 1
+            fi
           fi
 
+          # Install pip if not available
+          if ! $PYTHON_CMD -m pip --version &>/dev/null; then
+            echo "pip not found, installing..."
+            # Try ensurepip first (built-in)
+            $PYTHON_CMD -m ensurepip --upgrade --default-pip 2>/dev/null || true
+            # If that fails, try get-pip.py
+            if ! $PYTHON_CMD -m pip --version &>/dev/null; then
+              /usr/bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
+              $PYTHON_CMD /tmp/get-pip.py --user 2>/dev/null || $PYTHON_CMD /tmp/get-pip.py 2>/dev/null || true
+              /bin/rm -f /tmp/get-pip.py
+            fi
+            # Try installing via package manager as last resort
+            if ! $PYTHON_CMD -m pip --version &>/dev/null; then
+              if command -v /usr/bin/apt-get &> /dev/null; then
+                sudo /usr/bin/apt-get install -y python3-pip || true
+              elif command -v /usr/bin/yum &> /dev/null; then
+                sudo /usr/bin/yum install -y python3-pip || true
+              fi
+            fi
+            # Verify pip is now available
+            if ! $PYTHON_CMD -m pip --version &>/dev/null; then
+              echo "Error: Failed to install pip"
+              exit 1
+            fi
+          fi
+
+          # Add Python to PATH for subsequent steps
+          echo "$PYTHON_CMD" >> $GITHUB_PATH || echo "$(which $PYTHON_CMD | xargs dirname)" >> $GITHUB_PATH
+
           # Create 'python' symlink if it doesn't exist
-          if [ -n "$PYTHON_CMD" ] && ! command -v python &> /dev/null; then
-            mkdir -p "$HOME/bin"
-            ln -sf $(which $PYTHON_CMD) "$HOME/bin/python"
+          if [ "$PYTHON_CMD" != "python" ] && ! command -v python &> /dev/null; then
+            /bin/mkdir -p "$HOME/bin"
+            /bin/ln -sf $(which $PYTHON_CMD) "$HOME/bin/python" 2>/dev/null || true
             echo "$HOME/bin" >> $GITHUB_PATH
           fi
+
+          # Verify Python and pip are working
+          echo "Python location: $(which $PYTHON_CMD)"
+          echo "Python version:"
+          $PYTHON_CMD --version
+          echo "pip version:"
+          $PYTHON_CMD -m pip --version
         env:
           HOME: ${{ github.workspace }}/.home
 
