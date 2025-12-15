@@ -536,6 +536,77 @@ jobs:
           aws-region: ${{ inputs.aws_region }}
           role-session-name: github-actions-lambda-deploy
 
+      - name: Install AWS CLI (for self-hosted runners)
+        run: |
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
+          # Check if AWS CLI is already installed
+          if command -v aws &> /dev/null && aws --version &>/dev/null; then
+            echo "AWS CLI is already installed:"
+            aws --version
+            exit 0
+          fi
+
+          # Install AWS CLI in a writable location
+          AWS_CLI_DIR="$HOME/aws-cli"
+          /bin/mkdir -p "$AWS_CLI_DIR"
+
+          echo "Installing AWS CLI..."
+          # Download and install AWS CLI v2
+          if [ ! -f "$AWS_CLI_DIR/aws" ]; then
+            /usr/bin/curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip || /bin/curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip || true
+            if [ -f /tmp/awscliv2.zip ]; then
+              # Check if unzip is available
+              if ! command -v unzip &> /dev/null; then
+                echo "Installing unzip..."
+                if command -v /usr/bin/apt-get &> /dev/null; then
+                  sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y unzip || true
+                elif command -v /usr/bin/yum &> /dev/null; then
+                  sudo /usr/bin/yum install -y unzip || true
+                fi
+              fi
+              /usr/bin/unzip -q /tmp/awscliv2.zip -d /tmp || /bin/unzip -q /tmp/awscliv2.zip -d /tmp || true
+              if [ -d /tmp/aws ]; then
+                /tmp/aws/install -i "$AWS_CLI_DIR" -b "$AWS_CLI_DIR/bin" || true
+                /bin/rm -rf /tmp/aws /tmp/awscliv2.zip
+              fi
+            fi
+          fi
+
+          # If AWS CLI v2 installation failed, try v1 (pip install)
+          if [ ! -f "$AWS_CLI_DIR/bin/aws" ] && [ ! -f "$AWS_CLI_DIR/aws" ]; then
+            echo "AWS CLI v2 installation failed, trying pip install..."
+            # Use python3 to install awscli
+            if command -v python3 &> /dev/null; then
+              python3 -m pip install --user awscli || python3 -m pip install awscli || true
+              if [ -f "$HOME/.local/bin/aws" ]; then
+                echo "$HOME/.local/bin" >> $GITHUB_PATH
+                export PATH="$HOME/.local/bin:$PATH"
+              fi
+            fi
+          fi
+
+          # Add AWS CLI to PATH
+          if [ -f "$AWS_CLI_DIR/bin/aws" ]; then
+            echo "$AWS_CLI_DIR/bin" >> $GITHUB_PATH
+            export PATH="$AWS_CLI_DIR/bin:$PATH"
+          elif [ -f "$AWS_CLI_DIR/aws" ]; then
+            echo "$AWS_CLI_DIR" >> $GITHUB_PATH
+            export PATH="$AWS_CLI_DIR:$PATH"
+          fi
+
+          # Verify installation
+          if command -v aws &> /dev/null; then
+            echo "✅ AWS CLI installed successfully:"
+            aws --version
+          else
+            echo "⚠️  Warning: AWS CLI installation may have failed, but continuing..."
+            echo "Attempted installation methods: AWS CLI v2 (zip), pip install"
+          fi
+        env:
+          HOME: ${{ github.workspace }}/.home
+
       - name: Verify AWS Identity and Account
         run: |
           echo "=== AWS Identity Verification ==="
