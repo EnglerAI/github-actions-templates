@@ -244,6 +244,113 @@ jobs:
           echo ""
           echo "✅ S3 permission tests completed"
 
+      - name: Setup Python (for self-hosted runners)
+        run: |
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
+          # Use system Python or install if needed
+          PYTHON_VERSION="${{ inputs.python_version || '3.12' }}"
+          PYTHON_MAJOR_MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f1,2)
+
+          # Find available Python
+          PYTHON_CMD=""
+          if command -v python${PYTHON_MAJOR_MINOR} &> /dev/null; then
+            PYTHON_CMD="python${PYTHON_MAJOR_MINOR}"
+            echo "Using system Python ${PYTHON_MAJOR_MINOR}"
+            $PYTHON_CMD --version
+          elif command -v python3 &> /dev/null; then
+            PYTHON_CMD="python3"
+            SYSTEM_VERSION=$($PYTHON_CMD --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+            echo "Using system Python3 (version ${SYSTEM_VERSION})"
+            $PYTHON_CMD --version
+          else
+            echo "Python not found, attempting to install..."
+            if command -v /usr/bin/apt-get &> /dev/null; then
+              sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y python3 python3-pip || true
+            elif command -v /usr/bin/yum &> /dev/null; then
+              sudo /usr/bin/yum install -y python3 python3-pip || true
+            fi
+            if command -v python3 &> /dev/null; then
+              PYTHON_CMD="python3"
+              $PYTHON_CMD --version
+            else
+              echo "Error: Could not find or install Python"
+              exit 1
+            fi
+          fi
+
+          # Install pip if not available
+          if ! $PYTHON_CMD -m pip --version &>/dev/null; then
+            echo "pip not found, installing..."
+            # Try ensurepip first (built-in)
+            if ! $PYTHON_CMD -m ensurepip --upgrade --default-pip 2>/dev/null; then
+              echo "ensurepip failed, trying get-pip.py..."
+              # Download get-pip.py
+              /usr/bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || /bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || true
+              if [ -f /tmp/get-pip.py ]; then
+                # Try with --user first (doesn't require root)
+                echo "Installing pip with get-pip.py (--user)..."
+                $PYTHON_CMD /tmp/get-pip.py --user 2>&1 || true
+                # If --user didn't work, try without --user (may require adding to PATH)
+                if ! $PYTHON_CMD -m pip --version &>/dev/null; then
+                  echo "Installing pip with get-pip.py (system-wide)..."
+                  $PYTHON_CMD /tmp/get-pip.py 2>&1 || true
+                fi
+                # If pip is in user directory, add it to PATH
+                if [ -f "$HOME/.local/bin/pip" ]; then
+                  echo "$HOME/.local/bin" >> $GITHUB_PATH
+                  export PATH="$HOME/.local/bin:$PATH"
+                fi
+                /bin/rm -f /tmp/get-pip.py
+              fi
+            fi
+            # Try installing via package manager as last resort (non-fatal)
+            if ! $PYTHON_CMD -m pip --version &>/dev/null && ! "$HOME/.local/bin/pip" --version &>/dev/null 2>&1; then
+              echo "Trying package manager as last resort..."
+              if command -v /usr/bin/apt-get &> /dev/null; then
+                sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y python3-pip 2>&1 || echo "Package manager installation failed, continuing..."
+              elif command -v /usr/bin/yum &> /dev/null; then
+                sudo /usr/bin/yum install -y python3-pip 2>&1 || echo "Package manager installation failed, continuing..."
+              fi
+            fi
+            # Verify pip is now available (check both locations)
+            if ! $PYTHON_CMD -m pip --version &>/dev/null && ! "$HOME/.local/bin/pip" --version &>/dev/null 2>&1 && ! command -v pip &>/dev/null; then
+              echo "Error: Failed to install pip. Python: $PYTHON_CMD"
+              echo "Attempted: ensurepip, get-pip.py, package manager"
+              exit 1
+            fi
+          fi
+
+          # Add Python to PATH for subsequent steps
+          echo "$PYTHON_CMD" >> $GITHUB_PATH || echo "$(which $PYTHON_CMD | xargs dirname)" >> $GITHUB_PATH
+
+          # Create 'python' symlink if it doesn't exist
+          if [ "$PYTHON_CMD" != "python" ] && ! command -v python &> /dev/null; then
+            /bin/mkdir -p "$HOME/bin"
+            /bin/ln -sf $(which $PYTHON_CMD) "$HOME/bin/python" 2>/dev/null || true
+            echo "$HOME/bin" >> $GITHUB_PATH
+          fi
+
+          # Verify Python and pip are working
+          echo "Python location: $(which $PYTHON_CMD)"
+          echo "Python version:"
+          $PYTHON_CMD --version
+          echo "pip version:"
+          # Check pip in multiple locations
+          if $PYTHON_CMD -m pip --version &>/dev/null; then
+            $PYTHON_CMD -m pip --version
+          elif [ -f "$HOME/.local/bin/pip" ] && "$HOME/.local/bin/pip" --version &>/dev/null; then
+            "$HOME/.local/bin/pip" --version
+            echo "Note: pip is installed in ~/.local/bin"
+          elif command -v pip &>/dev/null && pip --version &>/dev/null; then
+            pip --version
+          else
+            echo "Warning: Could not verify pip installation"
+          fi
+        env:
+          HOME: ${{ github.workspace }}/.home
+
       - name: Install SAM CLI
         run: |
           echo "=== Installing SAM CLI ==="
