@@ -85,210 +85,23 @@ jobs:
   test:
     if: inputs.run_tests
     runs-on: ${{ inputs.runner || 'self-hosted' }}
-    env:
-      HOME: ${{ github.workspace }}/.home
     steps:
-      - name: Configure Git (for self-hosted runners)
-        run: |
-          mkdir -p "$HOME"
-          git config --global --add safe.directory '*' || true
-          git config --global user.name "GitHub Actions" || true
-          git config --global user.email "actions@github.com" || true
-        continue-on-error: true
-
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Python (for self-hosted runners)
-        run: |
-          # Ensure basic system PATH is available
-          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
-
-          # Use system Python or install if needed
-          PYTHON_VERSION="${{ inputs.python_version }}"
-          PYTHON_MAJOR_MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f1,2)
-
-          # Find available Python
-          PYTHON_CMD=""
-          if command -v python${PYTHON_MAJOR_MINOR} &> /dev/null; then
-            PYTHON_CMD="python${PYTHON_MAJOR_MINOR}"
-            echo "Using system Python ${PYTHON_MAJOR_MINOR}"
-            $PYTHON_CMD --version
-          elif command -v python3 &> /dev/null; then
-            PYTHON_CMD="python3"
-            SYSTEM_VERSION=$($PYTHON_CMD --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
-            echo "Using system Python3 (version ${SYSTEM_VERSION})"
-            $PYTHON_CMD --version
-          else
-            echo "Python not found, attempting to install..."
-            if command -v /usr/bin/apt-get &> /dev/null; then
-              sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y python3 python3-pip || true
-            elif command -v /usr/bin/yum &> /dev/null; then
-              sudo /usr/bin/yum install -y python3 python3-pip || true
-            fi
-            if command -v python3 &> /dev/null; then
-              PYTHON_CMD="python3"
-              $PYTHON_CMD --version
-            else
-              echo "Error: Could not find or install Python"
-              exit 1
-            fi
-          fi
-
-          # Install pip if not available
-          if ! $PYTHON_CMD -m pip --version &>/dev/null; then
-            echo "pip not found, installing..."
-            # Try ensurepip first (built-in)
-            if ! $PYTHON_CMD -m ensurepip --upgrade --default-pip 2>/dev/null; then
-              echo "ensurepip failed, trying get-pip.py..."
-              # Download get-pip.py
-              /usr/bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || /bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || true
-              if [ -f /tmp/get-pip.py ]; then
-                # Try with --user first (doesn't require root)
-                echo "Installing pip with get-pip.py (--user)..."
-                $PYTHON_CMD /tmp/get-pip.py --user 2>&1 || true
-                # If --user didn't work, try without --user (may require adding to PATH)
-                if ! $PYTHON_CMD -m pip --version &>/dev/null; then
-                  echo "Installing pip with get-pip.py (system-wide)..."
-                  $PYTHON_CMD /tmp/get-pip.py 2>&1 || true
-                fi
-                # If pip is in user directory, add it to PATH
-                if [ -f "$HOME/.local/bin/pip" ]; then
-                  echo "$HOME/.local/bin" >> $GITHUB_PATH
-                  export PATH="$HOME/.local/bin:$PATH"
-                fi
-                /bin/rm -f /tmp/get-pip.py
-              fi
-            fi
-            # Try installing via package manager as last resort (non-fatal)
-            if ! $PYTHON_CMD -m pip --version &>/dev/null && ! "$HOME/.local/bin/pip" --version &>/dev/null 2>&1; then
-              echo "Trying package manager as last resort..."
-              if command -v /usr/bin/apt-get &> /dev/null; then
-                sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y python3-pip 2>&1 || echo "Package manager installation failed, continuing..."
-              elif command -v /usr/bin/yum &> /dev/null; then
-                sudo /usr/bin/yum install -y python3-pip 2>&1 || echo "Package manager installation failed, continuing..."
-              fi
-            fi
-            # Verify pip is now available (check both locations)
-            if ! $PYTHON_CMD -m pip --version &>/dev/null && ! "$HOME/.local/bin/pip" --version &>/dev/null 2>&1 && ! command -v pip &>/dev/null; then
-              echo "Error: Failed to install pip. Python: $PYTHON_CMD"
-              echo "Attempted: ensurepip, get-pip.py, package manager"
-              exit 1
-            fi
-          fi
-
-          # Add Python to PATH for subsequent steps
-          echo "$PYTHON_CMD" >> $GITHUB_PATH || echo "$(which $PYTHON_CMD | xargs dirname)" >> $GITHUB_PATH
-
-          # Create 'python' symlink if it doesn't exist
-          if [ "$PYTHON_CMD" != "python" ] && ! command -v python &> /dev/null; then
-            /bin/mkdir -p "$HOME/bin"
-            /bin/ln -sf $(which $PYTHON_CMD) "$HOME/bin/python" 2>/dev/null || true
-            echo "$HOME/bin" >> $GITHUB_PATH
-          fi
-
-          # Verify Python and pip are working
-          echo "Python location: $(which $PYTHON_CMD)"
-          echo "Python version:"
-          $PYTHON_CMD --version
-          echo "pip version:"
-          # Check pip in multiple locations
-          if $PYTHON_CMD -m pip --version &>/dev/null; then
-            $PYTHON_CMD -m pip --version
-          elif [ -f "$HOME/.local/bin/pip" ] && "$HOME/.local/bin/pip" --version &>/dev/null; then
-            "$HOME/.local/bin/pip" --version
-            echo "Note: pip is installed in ~/.local/bin"
-          elif command -v pip &>/dev/null && pip --version &>/dev/null; then
-            pip --version
-          else
-            echo "Warning: Could not verify pip installation"
-          fi
-        env:
-          HOME: ${{ github.workspace }}/.home
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: "pip"
 
       - name: Install dependencies
         run: |
-          # Ensure basic system PATH is available
-          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
-
-          # Use python3 if python doesn't work, fallback to python
-          if command -v python3 &> /dev/null && python3 -m pip --version &>/dev/null; then
-            PYTHON_CMD="python3"
-          elif command -v python &> /dev/null && python -m pip --version &>/dev/null; then
-            PYTHON_CMD="python"
-          else
-            echo "Error: Neither python nor python3 with pip is available"
-            exit 1
-          fi
-
-          # Create virtual environment to avoid externally-managed-environment error
-          VENV_DIR="$HOME/venv"
-          echo "Creating virtual environment at $VENV_DIR..."
-
-          # Try to create venv with pip first
-          if $PYTHON_CMD -m venv "$VENV_DIR" 2>/dev/null; then
-            echo "Virtual environment created with pip"
-          # If that fails, try without pip and install pip manually
-          elif $PYTHON_CMD -m venv --without-pip "$VENV_DIR" 2>/dev/null; then
-            echo "Virtual environment created without pip, installing pip..."
-            # Install pip in the venv using get-pip.py
-            /usr/bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || /bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || true
-            if [ -f /tmp/get-pip.py ] && [ -f "$VENV_DIR/bin/python" ]; then
-              "$VENV_DIR/bin/python" /tmp/get-pip.py 2>&1 || true
-              /bin/rm -f /tmp/get-pip.py
-            fi
-          # If venv module doesn't work, try installing python3-venv
-          else
-            echo "venv module not available, trying to install python3-venv..."
-            if command -v /usr/bin/apt-get &> /dev/null; then
-              sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y python3-venv || true
-              # Try again after installing python3-venv
-              if $PYTHON_CMD -m venv "$VENV_DIR" 2>/dev/null; then
-                echo "Virtual environment created after installing python3-venv"
-              elif $PYTHON_CMD -m venv --without-pip "$VENV_DIR" 2>/dev/null; then
-                echo "Virtual environment created without pip, installing pip..."
-                /usr/bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || /bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || true
-                if [ -f /tmp/get-pip.py ] && [ -f "$VENV_DIR/bin/python" ]; then
-                  "$VENV_DIR/bin/python" /tmp/get-pip.py 2>&1 || true
-                  /bin/rm -f /tmp/get-pip.py
-                fi
-              fi
-            fi
-          fi
-
-          # Activate virtual environment if it exists and has pip
-          if [ -f "$VENV_DIR/bin/activate" ] && [ -f "$VENV_DIR/bin/pip" ]; then
-            source "$VENV_DIR/bin/activate"
-            echo "$VENV_DIR/bin" >> $GITHUB_PATH
-            export PATH="$VENV_DIR/bin:$PATH"
-            echo "Virtual environment activated with pip"
-            PIP_CMD="pip"
-          elif [ -f "$VENV_DIR/bin/activate" ]; then
-            # Venv exists but no pip - try to use system pip with --user
-            echo "Warning: Virtual environment created but pip not available, using --user flag"
-            export PATH="$HOME/.local/bin:$PATH"
-            echo "$HOME/.local/bin" >> $GITHUB_PATH
-            PIP_CMD="$PYTHON_CMD -m pip"
-            PIP_FLAG="--user"
-          else
-            echo "Warning: Virtual environment not created, using --user flag as fallback"
-            export PATH="$HOME/.local/bin:$PATH"
-            echo "$HOME/.local/bin" >> $GITHUB_PATH
-            PIP_CMD="$PYTHON_CMD -m pip"
-            PIP_FLAG="--user"
-          fi
-
-          # Upgrade pip in the environment
-          if [ "$PIP_CMD" = "pip" ]; then
-            pip install --upgrade pip || true
-          else
-            $PIP_CMD install $PIP_FLAG --upgrade pip || true
-          fi
-
+          python -m pip install --upgrade pip
           if [ -f "${{ inputs.requirements_file }}" ]; then
-            $PIP_CMD install $PIP_FLAG -r ${{ inputs.requirements_file }}
+            pip install -r ${{ inputs.requirements_file }}
           fi
-          $PIP_CMD install $PIP_FLAG pytest pytest-cov pytest-mock moto
+          pip install pytest pytest-cov pytest-mock moto
 
       - name: Run tests
         run: |
@@ -305,126 +118,15 @@ jobs:
       always() &&
       (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ${{ inputs.runner || 'self-hosted' }}
-    env:
-      HOME: ${{ github.workspace }}/.home
     steps:
-      - name: Configure Git (for self-hosted runners)
-        run: |
-          mkdir -p "$HOME"
-          git config --global --add safe.directory '*' || true
-          git config --global user.name "GitHub Actions" || true
-          git config --global user.email "actions@github.com" || true
-        continue-on-error: true
-
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Python (for self-hosted runners)
-        run: |
-          # Ensure basic system PATH is available
-          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
-
-          # Use system Python or install if needed
-          PYTHON_VERSION="${{ inputs.python_version }}"
-          PYTHON_MAJOR_MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f1,2)
-
-          # Find available Python
-          PYTHON_CMD=""
-          if command -v python${PYTHON_MAJOR_MINOR} &> /dev/null; then
-            PYTHON_CMD="python${PYTHON_MAJOR_MINOR}"
-            echo "Using system Python ${PYTHON_MAJOR_MINOR}"
-            $PYTHON_CMD --version
-          elif command -v python3 &> /dev/null; then
-            PYTHON_CMD="python3"
-            SYSTEM_VERSION=$($PYTHON_CMD --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
-            echo "Using system Python3 (version ${SYSTEM_VERSION})"
-            $PYTHON_CMD --version
-          else
-            echo "Python not found, attempting to install..."
-            if command -v /usr/bin/apt-get &> /dev/null; then
-              sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y python3 python3-pip || true
-            elif command -v /usr/bin/yum &> /dev/null; then
-              sudo /usr/bin/yum install -y python3 python3-pip || true
-            fi
-            if command -v python3 &> /dev/null; then
-              PYTHON_CMD="python3"
-              $PYTHON_CMD --version
-            else
-              echo "Error: Could not find or install Python"
-              exit 1
-            fi
-          fi
-
-          # Install pip if not available
-          if ! $PYTHON_CMD -m pip --version &>/dev/null; then
-            echo "pip not found, installing..."
-            # Try ensurepip first (built-in)
-            if ! $PYTHON_CMD -m ensurepip --upgrade --default-pip 2>/dev/null; then
-              echo "ensurepip failed, trying get-pip.py..."
-              # Download get-pip.py
-              /usr/bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || /bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || true
-              if [ -f /tmp/get-pip.py ]; then
-                # Try with --user first (doesn't require root)
-                echo "Installing pip with get-pip.py (--user)..."
-                $PYTHON_CMD /tmp/get-pip.py --user 2>&1 || true
-                # If --user didn't work, try without --user (may require adding to PATH)
-                if ! $PYTHON_CMD -m pip --version &>/dev/null; then
-                  echo "Installing pip with get-pip.py (system-wide)..."
-                  $PYTHON_CMD /tmp/get-pip.py 2>&1 || true
-                fi
-                # If pip is in user directory, add it to PATH
-                if [ -f "$HOME/.local/bin/pip" ]; then
-                  echo "$HOME/.local/bin" >> $GITHUB_PATH
-                  export PATH="$HOME/.local/bin:$PATH"
-                fi
-                /bin/rm -f /tmp/get-pip.py
-              fi
-            fi
-            # Try installing via package manager as last resort (non-fatal)
-            if ! $PYTHON_CMD -m pip --version &>/dev/null && ! "$HOME/.local/bin/pip" --version &>/dev/null 2>&1; then
-              echo "Trying package manager as last resort..."
-              if command -v /usr/bin/apt-get &> /dev/null; then
-                sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y python3-pip 2>&1 || echo "Package manager installation failed, continuing..."
-              elif command -v /usr/bin/yum &> /dev/null; then
-                sudo /usr/bin/yum install -y python3-pip 2>&1 || echo "Package manager installation failed, continuing..."
-              fi
-            fi
-            # Verify pip is now available (check both locations)
-            if ! $PYTHON_CMD -m pip --version &>/dev/null && ! "$HOME/.local/bin/pip" --version &>/dev/null 2>&1 && ! command -v pip &>/dev/null; then
-              echo "Error: Failed to install pip. Python: $PYTHON_CMD"
-              echo "Attempted: ensurepip, get-pip.py, package manager"
-              exit 1
-            fi
-          fi
-
-          # Add Python to PATH for subsequent steps
-          echo "$PYTHON_CMD" >> $GITHUB_PATH || echo "$(which $PYTHON_CMD | xargs dirname)" >> $GITHUB_PATH
-
-          # Create 'python' symlink if it doesn't exist
-          if [ "$PYTHON_CMD" != "python" ] && ! command -v python &> /dev/null; then
-            /bin/mkdir -p "$HOME/bin"
-            /bin/ln -sf $(which $PYTHON_CMD) "$HOME/bin/python" 2>/dev/null || true
-            echo "$HOME/bin" >> $GITHUB_PATH
-          fi
-
-          # Verify Python and pip are working
-          echo "Python location: $(which $PYTHON_CMD)"
-          echo "Python version:"
-          $PYTHON_CMD --version
-          echo "pip version:"
-          # Check pip in multiple locations
-          if $PYTHON_CMD -m pip --version &>/dev/null; then
-            $PYTHON_CMD -m pip --version
-          elif [ -f "$HOME/.local/bin/pip" ] && "$HOME/.local/bin/pip" --version &>/dev/null; then
-            "$HOME/.local/bin/pip" --version
-            echo "Note: pip is installed in ~/.local/bin"
-          elif command -v pip &>/dev/null && pip --version &>/dev/null; then
-            pip --version
-          else
-            echo "Warning: Could not verify pip installation"
-          fi
-        env:
-          HOME: ${{ github.workspace }}/.home
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: "pip"
 
       - name: Package Lambda function
         run: |
@@ -497,18 +199,8 @@ jobs:
     permissions:
       id-token: write # Required for OIDC
       contents: read
-    env:
-      HOME: ${{ github.workspace }}/.home
 
     steps:
-      - name: Configure Git (for self-hosted runners)
-        run: |
-          mkdir -p "$HOME"
-          git config --global --add safe.directory '*' || true
-          git config --global user.name "GitHub Actions" || true
-          git config --global user.email "actions@github.com" || true
-        continue-on-error: true
-
       - name: Debug - Check job context
         run: |
           echo "=== Deploy Job Debug Info ==="
@@ -535,77 +227,6 @@ jobs:
           role-to-assume: ${{ secrets.aws_role_arn }}
           aws-region: ${{ inputs.aws_region }}
           role-session-name: github-actions-lambda-deploy
-
-      - name: Install AWS CLI (for self-hosted runners)
-        run: |
-          # Ensure basic system PATH is available
-          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
-
-          # Check if AWS CLI is already installed
-          if command -v aws &> /dev/null && aws --version &>/dev/null; then
-            echo "AWS CLI is already installed:"
-            aws --version
-            exit 0
-          fi
-
-          # Install AWS CLI in a writable location
-          AWS_CLI_DIR="$HOME/aws-cli"
-          /bin/mkdir -p "$AWS_CLI_DIR"
-
-          echo "Installing AWS CLI..."
-          # Download and install AWS CLI v2
-          if [ ! -f "$AWS_CLI_DIR/aws" ]; then
-            /usr/bin/curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip || /bin/curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip || true
-            if [ -f /tmp/awscliv2.zip ]; then
-              # Check if unzip is available
-              if ! command -v unzip &> /dev/null; then
-                echo "Installing unzip..."
-                if command -v /usr/bin/apt-get &> /dev/null; then
-                  sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y unzip || true
-                elif command -v /usr/bin/yum &> /dev/null; then
-                  sudo /usr/bin/yum install -y unzip || true
-                fi
-              fi
-              /usr/bin/unzip -q /tmp/awscliv2.zip -d /tmp || /bin/unzip -q /tmp/awscliv2.zip -d /tmp || true
-              if [ -d /tmp/aws ]; then
-                /tmp/aws/install -i "$AWS_CLI_DIR" -b "$AWS_CLI_DIR/bin" || true
-                /bin/rm -rf /tmp/aws /tmp/awscliv2.zip
-              fi
-            fi
-          fi
-
-          # If AWS CLI v2 installation failed, try v1 (pip install)
-          if [ ! -f "$AWS_CLI_DIR/bin/aws" ] && [ ! -f "$AWS_CLI_DIR/aws" ]; then
-            echo "AWS CLI v2 installation failed, trying pip install..."
-            # Use python3 to install awscli
-            if command -v python3 &> /dev/null; then
-              python3 -m pip install --user awscli || python3 -m pip install awscli || true
-              if [ -f "$HOME/.local/bin/aws" ]; then
-                echo "$HOME/.local/bin" >> $GITHUB_PATH
-                export PATH="$HOME/.local/bin:$PATH"
-              fi
-            fi
-          fi
-
-          # Add AWS CLI to PATH
-          if [ -f "$AWS_CLI_DIR/bin/aws" ]; then
-            echo "$AWS_CLI_DIR/bin" >> $GITHUB_PATH
-            export PATH="$AWS_CLI_DIR/bin:$PATH"
-          elif [ -f "$AWS_CLI_DIR/aws" ]; then
-            echo "$AWS_CLI_DIR" >> $GITHUB_PATH
-            export PATH="$AWS_CLI_DIR:$PATH"
-          fi
-
-          # Verify installation
-          if command -v aws &> /dev/null; then
-            echo "✅ AWS CLI installed successfully:"
-            aws --version
-          else
-            echo "⚠️  Warning: AWS CLI installation may have failed, but continuing..."
-            echo "Attempted installation methods: AWS CLI v2 (zip), pip install"
-          fi
-        env:
-          HOME: ${{ github.workspace }}/.home
 
       - name: Verify AWS Identity and Account
         run: |
@@ -691,188 +312,10 @@ jobs:
           echo ""
           echo "✅ All S3 permission tests passed!"
 
-      - name: Setup Python (for self-hosted runners)
-        run: |
-          # Ensure basic system PATH is available
-          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
-
-          # Use system Python or install if needed
-          PYTHON_VERSION="${{ inputs.python_version || '3.12' }}"
-          PYTHON_MAJOR_MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f1,2)
-
-          # Find available Python
-          PYTHON_CMD=""
-          if command -v python${PYTHON_MAJOR_MINOR} &> /dev/null; then
-            PYTHON_CMD="python${PYTHON_MAJOR_MINOR}"
-            echo "Using system Python ${PYTHON_MAJOR_MINOR}"
-            $PYTHON_CMD --version
-          elif command -v python3 &> /dev/null; then
-            PYTHON_CMD="python3"
-            SYSTEM_VERSION=$($PYTHON_CMD --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
-            echo "Using system Python3 (version ${SYSTEM_VERSION})"
-            $PYTHON_CMD --version
-          else
-            echo "Python not found, attempting to install..."
-            if command -v /usr/bin/apt-get &> /dev/null; then
-              sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y python3 python3-pip || true
-            elif command -v /usr/bin/yum &> /dev/null; then
-              sudo /usr/bin/yum install -y python3 python3-pip || true
-            fi
-            if command -v python3 &> /dev/null; then
-              PYTHON_CMD="python3"
-              $PYTHON_CMD --version
-            else
-              echo "Error: Could not find or install Python"
-              exit 1
-            fi
-          fi
-
-          # Install pip if not available
-          if ! $PYTHON_CMD -m pip --version &>/dev/null; then
-            echo "pip not found, installing..."
-            # Try ensurepip first (built-in)
-            if ! $PYTHON_CMD -m ensurepip --upgrade --default-pip 2>/dev/null; then
-              echo "ensurepip failed, trying get-pip.py..."
-              # Download get-pip.py
-              /usr/bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || /bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || true
-              if [ -f /tmp/get-pip.py ]; then
-                # Try with --user first (doesn't require root)
-                echo "Installing pip with get-pip.py (--user)..."
-                $PYTHON_CMD /tmp/get-pip.py --user 2>&1 || true
-                # If --user didn't work, try without --user (may require adding to PATH)
-                if ! $PYTHON_CMD -m pip --version &>/dev/null; then
-                  echo "Installing pip with get-pip.py (system-wide)..."
-                  $PYTHON_CMD /tmp/get-pip.py 2>&1 || true
-                fi
-                # If pip is in user directory, add it to PATH
-                if [ -f "$HOME/.local/bin/pip" ]; then
-                  echo "$HOME/.local/bin" >> $GITHUB_PATH
-                  export PATH="$HOME/.local/bin:$PATH"
-                fi
-                /bin/rm -f /tmp/get-pip.py
-              fi
-            fi
-            # Try installing via package manager as last resort (non-fatal)
-            if ! $PYTHON_CMD -m pip --version &>/dev/null && ! "$HOME/.local/bin/pip" --version &>/dev/null 2>&1; then
-              echo "Trying package manager as last resort..."
-              if command -v /usr/bin/apt-get &> /dev/null; then
-                sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y python3-pip 2>&1 || echo "Package manager installation failed, continuing..."
-              elif command -v /usr/bin/yum &> /dev/null; then
-                sudo /usr/bin/yum install -y python3-pip 2>&1 || echo "Package manager installation failed, continuing..."
-              fi
-            fi
-            # Verify pip is now available (check both locations)
-            if ! $PYTHON_CMD -m pip --version &>/dev/null && ! "$HOME/.local/bin/pip" --version &>/dev/null 2>&1 && ! command -v pip &>/dev/null; then
-              echo "Error: Failed to install pip. Python: $PYTHON_CMD"
-              echo "Attempted: ensurepip, get-pip.py, package manager"
-              exit 1
-            fi
-          fi
-
-          # Add Python to PATH for subsequent steps
-          echo "$PYTHON_CMD" >> $GITHUB_PATH || echo "$(which $PYTHON_CMD | xargs dirname)" >> $GITHUB_PATH
-
-          # Create 'python' symlink if it doesn't exist
-          if [ "$PYTHON_CMD" != "python" ] && ! command -v python &> /dev/null; then
-            /bin/mkdir -p "$HOME/bin"
-            /bin/ln -sf $(which $PYTHON_CMD) "$HOME/bin/python" 2>/dev/null || true
-            echo "$HOME/bin" >> $GITHUB_PATH
-          fi
-
-          # Verify Python and pip are working
-          echo "Python location: $(which $PYTHON_CMD)"
-          echo "Python version:"
-          $PYTHON_CMD --version
-          echo "pip version:"
-          # Check pip in multiple locations
-          if $PYTHON_CMD -m pip --version &>/dev/null; then
-            $PYTHON_CMD -m pip --version
-          elif [ -f "$HOME/.local/bin/pip" ] && "$HOME/.local/bin/pip" --version &>/dev/null; then
-            "$HOME/.local/bin/pip" --version
-            echo "Note: pip is installed in ~/.local/bin"
-          elif command -v pip &>/dev/null && pip --version &>/dev/null; then
-            pip --version
-          else
-            echo "Warning: Could not verify pip installation"
-          fi
-        env:
-          HOME: ${{ github.workspace }}/.home
-
       - name: Install SAM CLI
         run: |
           echo "=== Installing SAM CLI ==="
-          # Ensure basic system PATH is available
-          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
-
-          # Use python3 if python doesn't work, fallback to python
-          if command -v python3 &> /dev/null && python3 -m pip --version &>/dev/null; then
-            PYTHON_CMD="python3"
-          elif command -v python &> /dev/null && python -m pip --version &>/dev/null; then
-            PYTHON_CMD="python"
-          else
-            echo "Error: Neither python nor python3 with pip is available"
-            exit 1
-          fi
-
-          # Create virtual environment to avoid externally-managed-environment error
-          VENV_DIR="$HOME/venv"
-          echo "Creating virtual environment at $VENV_DIR..."
-
-          # Try to create venv with pip first
-          if $PYTHON_CMD -m venv "$VENV_DIR" 2>/dev/null; then
-            echo "Virtual environment created with pip"
-          # If that fails, try without pip and install pip manually
-          elif $PYTHON_CMD -m venv --without-pip "$VENV_DIR" 2>/dev/null; then
-            echo "Virtual environment created without pip, installing pip..."
-            # Install pip in the venv using get-pip.py
-            /usr/bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || /bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || true
-            if [ -f /tmp/get-pip.py ] && [ -f "$VENV_DIR/bin/python" ]; then
-              "$VENV_DIR/bin/python" /tmp/get-pip.py 2>&1 || true
-              /bin/rm -f /tmp/get-pip.py
-            fi
-          # If venv module doesn't work, try installing python3-venv
-          else
-            echo "venv module not available, trying to install python3-venv..."
-            if command -v /usr/bin/apt-get &> /dev/null; then
-              sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y python3-venv || true
-              # Try again after installing python3-venv
-              if $PYTHON_CMD -m venv "$VENV_DIR" 2>/dev/null; then
-                echo "Virtual environment created after installing python3-venv"
-              elif $PYTHON_CMD -m venv --without-pip "$VENV_DIR" 2>/dev/null; then
-                echo "Virtual environment created without pip, installing pip..."
-                /usr/bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || /bin/curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || true
-                if [ -f /tmp/get-pip.py ] && [ -f "$VENV_DIR/bin/python" ]; then
-                  "$VENV_DIR/bin/python" /tmp/get-pip.py 2>&1 || true
-                  /bin/rm -f /tmp/get-pip.py
-                fi
-              fi
-            fi
-          fi
-
-          # Activate virtual environment if it exists and has pip
-          if [ -f "$VENV_DIR/bin/activate" ] && [ -f "$VENV_DIR/bin/pip" ]; then
-            source "$VENV_DIR/bin/activate"
-            echo "$VENV_DIR/bin" >> $GITHUB_PATH
-            export PATH="$VENV_DIR/bin:$PATH"
-            echo "Virtual environment activated with pip"
-            PIP_CMD="pip"
-          elif [ -f "$VENV_DIR/bin/activate" ]; then
-            # Venv exists but no pip - try to use system pip with --user
-            echo "Warning: Virtual environment created but pip not available, using --user flag"
-            export PATH="$HOME/.local/bin:$PATH"
-            echo "$HOME/.local/bin" >> $GITHUB_PATH
-            PIP_CMD="$PYTHON_CMD -m pip"
-            PIP_FLAG="--user"
-          else
-            echo "Warning: Virtual environment not created, using --user flag as fallback"
-            export PATH="$HOME/.local/bin:$PATH"
-            echo "$HOME/.local/bin" >> $GITHUB_PATH
-            PIP_CMD="$PYTHON_CMD -m pip"
-            PIP_FLAG="--user"
-          fi
-
-          # Install SAM CLI
-          $PIP_CMD install $PIP_FLAG aws-sam-cli
+          pip install aws-sam-cli
           sam --version
 
       - name: Upload to S3
@@ -1001,6 +444,46 @@ jobs:
           role-to-assume: ${{ secrets.aws_role_arn }}
           aws-region: ${{ inputs.aws_region }}
           role-session-name: github-actions-smoke-test-${{ github.run_id }}
+
+      - name: Verify AWS CLI installation
+        run: |
+          echo "=== Verifying AWS CLI ==="
+          AWS_CLI_PATH=""
+          
+          if command -v aws &> /dev/null; then
+            echo "✅ AWS CLI found in PATH"
+            AWS_CLI_PATH=$(which aws)
+          else
+            echo "⚠️  AWS CLI not found in PATH, attempting to locate..."
+            # Check common installation locations
+            if [ -f /usr/local/bin/aws ]; then
+              echo "Found AWS CLI at /usr/local/bin/aws"
+              AWS_CLI_PATH="/usr/local/bin/aws"
+              echo "/usr/local/bin" >> $GITHUB_PATH
+            elif [ -f /usr/bin/aws ]; then
+              echo "Found AWS CLI at /usr/bin/aws"
+              AWS_CLI_PATH="/usr/bin/aws"
+              echo "/usr/bin" >> $GITHUB_PATH
+            elif [ -f "$HOME/.local/bin/aws" ]; then
+              echo "Found AWS CLI at $HOME/.local/bin/aws"
+              AWS_CLI_PATH="$HOME/.local/bin/aws"
+              echo "$HOME/.local/bin" >> $GITHUB_PATH
+            else
+              echo "❌ AWS CLI not found - installing via pip..."
+              pip install --user awscli
+              AWS_CLI_PATH="$HOME/.local/bin/aws"
+              echo "$HOME/.local/bin" >> $GITHUB_PATH
+            fi
+          fi
+          
+          # Verify AWS CLI works
+          aws --version || {
+            echo "❌ AWS CLI verification failed"
+            echo "AWS CLI path: ${AWS_CLI_PATH}"
+            exit 1
+          }
+          
+          echo "✅ AWS CLI verified at: $(which aws)"
 
       - name: Run smoke test
         run: |
