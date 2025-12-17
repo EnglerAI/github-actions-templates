@@ -202,7 +202,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.python_version }}
-          cache: "pip"
+          cache: ${{ env.DISABLE_PIP_CACHE == 'true' && '""' || '"pip"' }}
 
       - name: Install dependencies
         working-directory: ${{ inputs.working_directory }}
@@ -430,25 +430,40 @@ jobs:
           fi
           
           # Fix permissions on pip cache directory
+          # Try to make it writable, and if that fails, use an alternative user-writable location
+          PIP_CACHE_WRITABLE=false
           if [ -d "$PIP_CACHE_DIR" ]; then
             chmod -R 755 "$PIP_CACHE_DIR" 2>/dev/null || chmod -R 777 "$PIP_CACHE_DIR" 2>/dev/null || true
-            # Verify it's actually writable
-            if [ ! -w "$PIP_CACHE_DIR" ]; then
-              echo "⚠️  Pip cache directory not writable, pip cache will be disabled"
-              echo "PIP_NO_CACHE_DIR=1" >> $GITHUB_ENV
-            else
-              echo "✅ Pip cache directory is writable"
+            # Verify it's actually writable by trying to create a test file
+            if touch "$PIP_CACHE_DIR/.test_write" 2>/dev/null; then
+              rm -f "$PIP_CACHE_DIR/.test_write" 2>/dev/null || true
+              PIP_CACHE_WRITABLE=true
+              echo "✅ Pip cache directory is writable: $PIP_CACHE_DIR"
             fi
-          else
-            # Cache directory doesn't exist and we can't create it - disable pip cache
-            echo "⚠️  Cannot create pip cache directory, pip cache will be disabled"
-            echo "PIP_NO_CACHE_DIR=1" >> $GITHUB_ENV
+          fi
+          
+          # If default cache location isn't writable, use a user-writable alternative
+          if [ "$PIP_CACHE_WRITABLE" = false ]; then
+            echo "⚠️  Default pip cache directory not writable, using alternative location"
+            # Use a location we know we can write to (in the runner's work directory)
+            ALTERNATIVE_CACHE_DIR="$HOME/.local/pip-cache"
+            mkdir -p "$ALTERNATIVE_CACHE_DIR" 2>/dev/null || true
+            if touch "$ALTERNATIVE_CACHE_DIR/.test_write" 2>/dev/null; then
+              rm -f "$ALTERNATIVE_CACHE_DIR/.test_write" 2>/dev/null || true
+              echo "✅ Using alternative pip cache directory: $ALTERNATIVE_CACHE_DIR"
+              echo "PIP_CACHE_DIR=$ALTERNATIVE_CACHE_DIR" >> $GITHUB_ENV
+              PIP_CACHE_DIR="$ALTERNATIVE_CACHE_DIR"
+            else
+              echo "⚠️  Alternative cache location also not writable, disabling pip cache"
+              echo "PIP_NO_CACHE_DIR=1" >> $GITHUB_ENV
+              echo "DISABLE_PIP_CACHE=true" >> $GITHUB_ENV
+            fi
           fi
           
           echo "Toolcache directory setup complete"
           echo "TOOLCACHE_DIR: $TOOLCACHE_DIR"
           echo "PYTHON_CACHE_DIR: $PYTHON_CACHE_DIR"
-          echo "PIP_CACHE_DIR: $PIP_CACHE_DIR"
+          echo "PIP_CACHE_DIR: ${PIP_CACHE_DIR}"
           echo "RUNNER_USER: $RUNNER_USER"
           ls -la "$TOOLCACHE_DIR" 2>/dev/null || echo "Cannot list toolcache directory"
 
@@ -456,7 +471,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.python_version }}
-          cache: "pip"
+          cache: ${{ env.DISABLE_PIP_CACHE == 'true' && '""' || '"pip"' }}
 
       - name: Install dependencies
         run: |
@@ -738,7 +753,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.python_version || '3.12' }}
-          cache: "pip"
+          cache: ${{ env.DISABLE_PIP_CACHE == 'true' && '""' || '"pip"' }}
 
       - name: Install cfn-lint
         run: |
