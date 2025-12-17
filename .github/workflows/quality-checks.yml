@@ -110,7 +110,12 @@ jobs:
           # The setup-python action needs this directory to cache Python versions
           # The runner user must be able to create subdirectories here
           TOOLCACHE_DIR="/opt/hostedtoolcache"
-          RUNNER_USER="${USER:-runner}"
+          # Get the actual current user
+          RUNNER_USER=$(whoami 2>/dev/null || id -un 2>/dev/null || echo "${USER:-runner}")
+          echo "Current user: $RUNNER_USER"
+          echo "HOME directory: $HOME"
+          echo "User ID: $(id -u 2>/dev/null || echo 'unknown')"
+          echo "Group ID: $(id -g 2>/dev/null || echo 'unknown')"
           
           if [ ! -d "$TOOLCACHE_DIR" ]; then
             echo "Creating toolcache directory: $TOOLCACHE_DIR"
@@ -167,10 +172,15 @@ jobs:
           fi
           
           # Fix ownership and permissions on .cache directory
+          echo "Fixing ownership of $CACHE_DIR to $RUNNER_USER"
           if command -v sudo >/dev/null 2>&1; then
-            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$CACHE_DIR" 2>/dev/null || true
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$CACHE_DIR" 2>&1 || echo "Note: Could not change ownership (may already be correct)"
           fi
           chmod -R 755 "$CACHE_DIR" 2>/dev/null || chmod -R 777 "$CACHE_DIR" 2>/dev/null || true
+          
+          # Show current ownership
+          echo "Current ownership of $CACHE_DIR:"
+          ls -ld "$CACHE_DIR" 2>/dev/null || echo "Cannot list directory"
           
           # Ensure pip cache directory exists
           PIP_CACHE_DIR="$CACHE_DIR/pip"
@@ -180,17 +190,25 @@ jobs:
           fi
           
           # Fix ownership and permissions on pip cache directory
+          echo "Fixing ownership of $PIP_CACHE_DIR to $RUNNER_USER"
           if command -v sudo >/dev/null 2>&1; then
-            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PIP_CACHE_DIR" 2>/dev/null || true
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PIP_CACHE_DIR" 2>&1 || echo "Note: Could not change ownership (may already be correct)"
           fi
           chmod -R 755 "$PIP_CACHE_DIR" 2>/dev/null || chmod -R 777 "$PIP_CACHE_DIR" 2>/dev/null || true
+          
+          # Show current ownership
+          echo "Current ownership of $PIP_CACHE_DIR:"
+          ls -ld "$PIP_CACHE_DIR" 2>/dev/null || echo "Cannot list directory"
           
           # Verify it's actually writable by trying to create a test file
           if touch "$PIP_CACHE_DIR/.test_write" 2>/dev/null; then
             rm -f "$PIP_CACHE_DIR/.test_write" 2>/dev/null || true
             echo "✅ Pip cache directory is writable: $PIP_CACHE_DIR"
           else
-            echo "⚠️  Warning: Pip cache directory may not be fully writable, but continuing"
+            echo "❌ ERROR: Pip cache directory is NOT writable: $PIP_CACHE_DIR"
+            echo "Attempting to diagnose..."
+            ls -la "$PIP_CACHE_DIR" 2>/dev/null || echo "Cannot list pip cache directory"
+            stat "$PIP_CACHE_DIR" 2>/dev/null || echo "Cannot stat pip cache directory"
           fi
           
           echo "Toolcache directory setup complete"
@@ -366,7 +384,12 @@ jobs:
           # The setup-python action needs this directory to cache Python versions
           # The runner user must be able to create subdirectories here
           TOOLCACHE_DIR="/opt/hostedtoolcache"
-          RUNNER_USER="${USER:-runner}"
+          # Get the actual current user
+          RUNNER_USER=$(whoami 2>/dev/null || id -un 2>/dev/null || echo "${USER:-runner}")
+          echo "Current user: $RUNNER_USER"
+          echo "HOME directory: $HOME"
+          echo "User ID: $(id -u 2>/dev/null || echo 'unknown')"
+          echo "Group ID: $(id -g 2>/dev/null || echo 'unknown')"
           
           if [ ! -d "$TOOLCACHE_DIR" ]; then
             echo "Creating toolcache directory: $TOOLCACHE_DIR"
@@ -423,10 +446,15 @@ jobs:
           fi
           
           # Fix ownership and permissions on .cache directory
+          echo "Fixing ownership of $CACHE_DIR to $RUNNER_USER"
           if command -v sudo >/dev/null 2>&1; then
-            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$CACHE_DIR" 2>/dev/null || true
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$CACHE_DIR" 2>&1 || echo "Note: Could not change ownership (may already be correct)"
           fi
           chmod -R 755 "$CACHE_DIR" 2>/dev/null || chmod -R 777 "$CACHE_DIR" 2>/dev/null || true
+          
+          # Show current ownership
+          echo "Current ownership of $CACHE_DIR:"
+          ls -ld "$CACHE_DIR" 2>/dev/null || echo "Cannot list directory"
           
           # Ensure pip cache directory exists
           PIP_CACHE_DIR="$CACHE_DIR/pip"
@@ -436,17 +464,25 @@ jobs:
           fi
           
           # Fix ownership and permissions on pip cache directory
+          echo "Fixing ownership of $PIP_CACHE_DIR to $RUNNER_USER"
           if command -v sudo >/dev/null 2>&1; then
-            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PIP_CACHE_DIR" 2>/dev/null || true
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PIP_CACHE_DIR" 2>&1 || echo "Note: Could not change ownership (may already be correct)"
           fi
           chmod -R 755 "$PIP_CACHE_DIR" 2>/dev/null || chmod -R 777 "$PIP_CACHE_DIR" 2>/dev/null || true
+          
+          # Show current ownership
+          echo "Current ownership of $PIP_CACHE_DIR:"
+          ls -ld "$PIP_CACHE_DIR" 2>/dev/null || echo "Cannot list directory"
           
           # Verify it's actually writable by trying to create a test file
           if touch "$PIP_CACHE_DIR/.test_write" 2>/dev/null; then
             rm -f "$PIP_CACHE_DIR/.test_write" 2>/dev/null || true
             echo "✅ Pip cache directory is writable: $PIP_CACHE_DIR"
           else
-            echo "⚠️  Warning: Pip cache directory may not be fully writable, but continuing"
+            echo "❌ ERROR: Pip cache directory is NOT writable: $PIP_CACHE_DIR"
+            echo "Attempting to diagnose..."
+            ls -la "$PIP_CACHE_DIR" 2>/dev/null || echo "Cannot list pip cache directory"
+            stat "$PIP_CACHE_DIR" 2>/dev/null || echo "Cannot stat pip cache directory"
           fi
           
           echo "Toolcache directory setup complete"
@@ -650,7 +686,12 @@ jobs:
           # The setup-python action needs this directory to cache Python versions
           # The runner user must be able to create subdirectories here
           TOOLCACHE_DIR="/opt/hostedtoolcache"
-          RUNNER_USER="${USER:-runner}"
+          # Get the actual current user
+          RUNNER_USER=$(whoami 2>/dev/null || id -un 2>/dev/null || echo "${USER:-runner}")
+          echo "Current user: $RUNNER_USER"
+          echo "HOME directory: $HOME"
+          echo "User ID: $(id -u 2>/dev/null || echo 'unknown')"
+          echo "Group ID: $(id -g 2>/dev/null || echo 'unknown')"
           
           if [ ! -d "$TOOLCACHE_DIR" ]; then
             echo "Creating toolcache directory: $TOOLCACHE_DIR"
@@ -707,10 +748,15 @@ jobs:
           fi
           
           # Fix ownership and permissions on .cache directory
+          echo "Fixing ownership of $CACHE_DIR to $RUNNER_USER"
           if command -v sudo >/dev/null 2>&1; then
-            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$CACHE_DIR" 2>/dev/null || true
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$CACHE_DIR" 2>&1 || echo "Note: Could not change ownership (may already be correct)"
           fi
           chmod -R 755 "$CACHE_DIR" 2>/dev/null || chmod -R 777 "$CACHE_DIR" 2>/dev/null || true
+          
+          # Show current ownership
+          echo "Current ownership of $CACHE_DIR:"
+          ls -ld "$CACHE_DIR" 2>/dev/null || echo "Cannot list directory"
           
           # Ensure pip cache directory exists
           PIP_CACHE_DIR="$CACHE_DIR/pip"
@@ -720,17 +766,25 @@ jobs:
           fi
           
           # Fix ownership and permissions on pip cache directory
+          echo "Fixing ownership of $PIP_CACHE_DIR to $RUNNER_USER"
           if command -v sudo >/dev/null 2>&1; then
-            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PIP_CACHE_DIR" 2>/dev/null || true
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PIP_CACHE_DIR" 2>&1 || echo "Note: Could not change ownership (may already be correct)"
           fi
           chmod -R 755 "$PIP_CACHE_DIR" 2>/dev/null || chmod -R 777 "$PIP_CACHE_DIR" 2>/dev/null || true
+          
+          # Show current ownership
+          echo "Current ownership of $PIP_CACHE_DIR:"
+          ls -ld "$PIP_CACHE_DIR" 2>/dev/null || echo "Cannot list directory"
           
           # Verify it's actually writable by trying to create a test file
           if touch "$PIP_CACHE_DIR/.test_write" 2>/dev/null; then
             rm -f "$PIP_CACHE_DIR/.test_write" 2>/dev/null || true
             echo "✅ Pip cache directory is writable: $PIP_CACHE_DIR"
           else
-            echo "⚠️  Warning: Pip cache directory may not be fully writable, but continuing"
+            echo "❌ ERROR: Pip cache directory is NOT writable: $PIP_CACHE_DIR"
+            echo "Attempting to diagnose..."
+            ls -la "$PIP_CACHE_DIR" 2>/dev/null || echo "Cannot list pip cache directory"
+            stat "$PIP_CACHE_DIR" 2>/dev/null || echo "Cannot stat pip cache directory"
           fi
           
           echo "Toolcache directory setup complete"
