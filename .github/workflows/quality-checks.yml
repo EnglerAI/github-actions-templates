@@ -104,6 +104,35 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup Python toolcache directory
+        run: |
+          # Create toolcache directory structure for setup-python action on self-hosted runners
+          # The setup-python action needs this directory to cache Python versions
+          TOOLCACHE_DIR="/opt/hostedtoolcache"
+          if [ ! -d "$TOOLCACHE_DIR" ]; then
+            echo "Creating toolcache directory: $TOOLCACHE_DIR"
+            if command -v sudo >/dev/null 2>&1; then
+              sudo mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || true
+              sudo chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+            else
+              mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || true
+              chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+            fi
+          fi
+          
+          # Ensure Python subdirectory is accessible
+          PYTHON_CACHE_DIR="$TOOLCACHE_DIR/Python"
+          if [ ! -d "$PYTHON_CACHE_DIR" ]; then
+            echo "Creating Python toolcache directory: $PYTHON_CACHE_DIR"
+            if command -v sudo >/dev/null 2>&1; then
+              sudo mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              sudo chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+            else
+              mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+            fi
+          fi
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -263,6 +292,35 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Setup Python toolcache directory
+        run: |
+          # Create toolcache directory structure for setup-python action on self-hosted runners
+          # The setup-python action needs this directory to cache Python versions
+          TOOLCACHE_DIR="/opt/hostedtoolcache"
+          if [ ! -d "$TOOLCACHE_DIR" ]; then
+            echo "Creating toolcache directory: $TOOLCACHE_DIR"
+            if command -v sudo >/dev/null 2>&1; then
+              sudo mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || true
+              sudo chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+            else
+              mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || true
+              chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+            fi
+          fi
+          
+          # Ensure Python subdirectory is accessible
+          PYTHON_CACHE_DIR="$TOOLCACHE_DIR/Python"
+          if [ ! -d "$PYTHON_CACHE_DIR" ]; then
+            echo "Creating Python toolcache directory: $PYTHON_CACHE_DIR"
+            if command -v sudo >/dev/null 2>&1; then
+              sudo mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              sudo chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+            else
+              mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+            fi
+          fi
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -452,9 +510,45 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup Python toolcache directory
+        run: |
+          # Create toolcache directory structure for setup-python action on self-hosted runners
+          # The setup-python action needs this directory to cache Python versions
+          TOOLCACHE_DIR="/opt/hostedtoolcache"
+          if [ ! -d "$TOOLCACHE_DIR" ]; then
+            echo "Creating toolcache directory: $TOOLCACHE_DIR"
+            if command -v sudo >/dev/null 2>&1; then
+              sudo mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || true
+              sudo chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+            else
+              mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || true
+              chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+            fi
+          fi
+          
+          # Ensure Python subdirectory is accessible
+          PYTHON_CACHE_DIR="$TOOLCACHE_DIR/Python"
+          if [ ! -d "$PYTHON_CACHE_DIR" ]; then
+            echo "Creating Python toolcache directory: $PYTHON_CACHE_DIR"
+            if command -v sudo >/dev/null 2>&1; then
+              sudo mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              sudo chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+            else
+              mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+            fi
+          fi
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version || '3.12' }}
+          cache: "pip"
+
       - name: Install cfn-lint
         run: |
           echo "=== Installing cfn-lint ==="
+          python -m pip install --upgrade pip
           pip install cfn-lint junit-xml
           cfn-lint --version
 
