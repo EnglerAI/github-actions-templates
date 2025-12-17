@@ -162,10 +162,20 @@ jobs:
           
           # Ensure pip cache directory exists and is writable by the current user
           # The setup-python action with cache: "pip" checks the default cache location
-          # We need to ensure the default location is properly owned and writable
+          # Get the actual home directory for the current user (not $HOME which may be /home/runner)
+          ACTUAL_HOME=$(eval echo ~$RUNNER_USER)
+          echo "Actual home directory for $RUNNER_USER: $ACTUAL_HOME"
+          
+          # Use the actual user's home directory for cache, or fall back to $HOME
+          if [ -d "$ACTUAL_HOME" ] && [ "$ACTUAL_HOME" != "$HOME" ]; then
+            CACHE_DIR="$ACTUAL_HOME/.cache"
+            echo "Using actual user home directory for cache: $CACHE_DIR"
+          else
+            CACHE_DIR="$HOME/.cache"
+            echo "Using $HOME for cache: $CACHE_DIR"
+          fi
           
           # Ensure parent .cache directory exists and is writable
-          CACHE_DIR="$HOME/.cache"
           if [ ! -d "$CACHE_DIR" ]; then
             echo "Creating cache directory: $CACHE_DIR"
             mkdir -p "$CACHE_DIR" 2>/dev/null || true
@@ -174,7 +184,7 @@ jobs:
           # Fix ownership and permissions on .cache directory
           echo "Fixing ownership of $CACHE_DIR to $RUNNER_USER"
           if command -v sudo >/dev/null 2>&1; then
-            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$CACHE_DIR" 2>&1 || echo "Note: Could not change ownership (may already be correct)"
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$CACHE_DIR" 2>&1 || echo "Note: Could not change ownership"
           fi
           chmod -R 755 "$CACHE_DIR" 2>/dev/null || chmod -R 777 "$CACHE_DIR" 2>/dev/null || true
           
@@ -192,7 +202,7 @@ jobs:
           # Fix ownership and permissions on pip cache directory
           echo "Fixing ownership of $PIP_CACHE_DIR to $RUNNER_USER"
           if command -v sudo >/dev/null 2>&1; then
-            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PIP_CACHE_DIR" 2>&1 || echo "Note: Could not change ownership (may already be correct)"
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PIP_CACHE_DIR" 2>&1 || echo "Note: Could not change ownership"
           fi
           chmod -R 755 "$PIP_CACHE_DIR" 2>/dev/null || chmod -R 777 "$PIP_CACHE_DIR" 2>/dev/null || true
           
@@ -209,6 +219,16 @@ jobs:
             echo "Attempting to diagnose..."
             ls -la "$PIP_CACHE_DIR" 2>/dev/null || echo "Cannot list pip cache directory"
             stat "$PIP_CACHE_DIR" 2>/dev/null || echo "Cannot stat pip cache directory"
+          fi
+          
+          # Also ensure $HOME/.cache exists (pip may check this too)
+          if [ "$HOME" != "$ACTUAL_HOME" ] && [ -n "$HOME" ]; then
+            echo "Also ensuring $HOME/.cache exists for compatibility"
+            mkdir -p "$HOME/.cache/pip" 2>/dev/null || true
+            if command -v sudo >/dev/null 2>&1; then
+              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$HOME/.cache" 2>/dev/null || true
+            fi
+            chmod -R 755 "$HOME/.cache" 2>/dev/null || chmod -R 777 "$HOME/.cache" 2>/dev/null || true
           fi
           
           echo "Toolcache directory setup complete"
@@ -436,10 +456,20 @@ jobs:
           
           # Ensure pip cache directory exists and is writable by the current user
           # The setup-python action with cache: "pip" checks the default cache location
-          # We need to ensure the default location is properly owned and writable
+          # Get the actual home directory for the current user (not $HOME which may be /home/runner)
+          ACTUAL_HOME=$(eval echo ~$RUNNER_USER)
+          echo "Actual home directory for $RUNNER_USER: $ACTUAL_HOME"
+          
+          # Use the actual user's home directory for cache, or fall back to $HOME
+          if [ -d "$ACTUAL_HOME" ] && [ "$ACTUAL_HOME" != "$HOME" ]; then
+            CACHE_DIR="$ACTUAL_HOME/.cache"
+            echo "Using actual user home directory for cache: $CACHE_DIR"
+          else
+            CACHE_DIR="$HOME/.cache"
+            echo "Using $HOME for cache: $CACHE_DIR"
+          fi
           
           # Ensure parent .cache directory exists and is writable
-          CACHE_DIR="$HOME/.cache"
           if [ ! -d "$CACHE_DIR" ]; then
             echo "Creating cache directory: $CACHE_DIR"
             mkdir -p "$CACHE_DIR" 2>/dev/null || true
@@ -448,7 +478,7 @@ jobs:
           # Fix ownership and permissions on .cache directory
           echo "Fixing ownership of $CACHE_DIR to $RUNNER_USER"
           if command -v sudo >/dev/null 2>&1; then
-            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$CACHE_DIR" 2>&1 || echo "Note: Could not change ownership (may already be correct)"
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$CACHE_DIR" 2>&1 || echo "Note: Could not change ownership"
           fi
           chmod -R 755 "$CACHE_DIR" 2>/dev/null || chmod -R 777 "$CACHE_DIR" 2>/dev/null || true
           
@@ -466,7 +496,7 @@ jobs:
           # Fix ownership and permissions on pip cache directory
           echo "Fixing ownership of $PIP_CACHE_DIR to $RUNNER_USER"
           if command -v sudo >/dev/null 2>&1; then
-            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PIP_CACHE_DIR" 2>&1 || echo "Note: Could not change ownership (may already be correct)"
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PIP_CACHE_DIR" 2>&1 || echo "Note: Could not change ownership"
           fi
           chmod -R 755 "$PIP_CACHE_DIR" 2>/dev/null || chmod -R 777 "$PIP_CACHE_DIR" 2>/dev/null || true
           
@@ -483,6 +513,16 @@ jobs:
             echo "Attempting to diagnose..."
             ls -la "$PIP_CACHE_DIR" 2>/dev/null || echo "Cannot list pip cache directory"
             stat "$PIP_CACHE_DIR" 2>/dev/null || echo "Cannot stat pip cache directory"
+          fi
+          
+          # Also ensure $HOME/.cache exists (pip may check this too)
+          if [ "$HOME" != "$ACTUAL_HOME" ] && [ -n "$HOME" ]; then
+            echo "Also ensuring $HOME/.cache exists for compatibility"
+            mkdir -p "$HOME/.cache/pip" 2>/dev/null || true
+            if command -v sudo >/dev/null 2>&1; then
+              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$HOME/.cache" 2>/dev/null || true
+            fi
+            chmod -R 755 "$HOME/.cache" 2>/dev/null || chmod -R 777 "$HOME/.cache" 2>/dev/null || true
           fi
           
           echo "Toolcache directory setup complete"
@@ -738,10 +778,20 @@ jobs:
           
           # Ensure pip cache directory exists and is writable by the current user
           # The setup-python action with cache: "pip" checks the default cache location
-          # We need to ensure the default location is properly owned and writable
+          # Get the actual home directory for the current user (not $HOME which may be /home/runner)
+          ACTUAL_HOME=$(eval echo ~$RUNNER_USER)
+          echo "Actual home directory for $RUNNER_USER: $ACTUAL_HOME"
+          
+          # Use the actual user's home directory for cache, or fall back to $HOME
+          if [ -d "$ACTUAL_HOME" ] && [ "$ACTUAL_HOME" != "$HOME" ]; then
+            CACHE_DIR="$ACTUAL_HOME/.cache"
+            echo "Using actual user home directory for cache: $CACHE_DIR"
+          else
+            CACHE_DIR="$HOME/.cache"
+            echo "Using $HOME for cache: $CACHE_DIR"
+          fi
           
           # Ensure parent .cache directory exists and is writable
-          CACHE_DIR="$HOME/.cache"
           if [ ! -d "$CACHE_DIR" ]; then
             echo "Creating cache directory: $CACHE_DIR"
             mkdir -p "$CACHE_DIR" 2>/dev/null || true
@@ -750,7 +800,7 @@ jobs:
           # Fix ownership and permissions on .cache directory
           echo "Fixing ownership of $CACHE_DIR to $RUNNER_USER"
           if command -v sudo >/dev/null 2>&1; then
-            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$CACHE_DIR" 2>&1 || echo "Note: Could not change ownership (may already be correct)"
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$CACHE_DIR" 2>&1 || echo "Note: Could not change ownership"
           fi
           chmod -R 755 "$CACHE_DIR" 2>/dev/null || chmod -R 777 "$CACHE_DIR" 2>/dev/null || true
           
@@ -768,7 +818,7 @@ jobs:
           # Fix ownership and permissions on pip cache directory
           echo "Fixing ownership of $PIP_CACHE_DIR to $RUNNER_USER"
           if command -v sudo >/dev/null 2>&1; then
-            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PIP_CACHE_DIR" 2>&1 || echo "Note: Could not change ownership (may already be correct)"
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PIP_CACHE_DIR" 2>&1 || echo "Note: Could not change ownership"
           fi
           chmod -R 755 "$PIP_CACHE_DIR" 2>/dev/null || chmod -R 777 "$PIP_CACHE_DIR" 2>/dev/null || true
           
@@ -785,6 +835,16 @@ jobs:
             echo "Attempting to diagnose..."
             ls -la "$PIP_CACHE_DIR" 2>/dev/null || echo "Cannot list pip cache directory"
             stat "$PIP_CACHE_DIR" 2>/dev/null || echo "Cannot stat pip cache directory"
+          fi
+          
+          # Also ensure $HOME/.cache exists (pip may check this too)
+          if [ "$HOME" != "$ACTUAL_HOME" ] && [ -n "$HOME" ]; then
+            echo "Also ensuring $HOME/.cache exists for compatibility"
+            mkdir -p "$HOME/.cache/pip" 2>/dev/null || true
+            if command -v sudo >/dev/null 2>&1; then
+              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$HOME/.cache" 2>/dev/null || true
+            fi
+            chmod -R 755 "$HOME/.cache" 2>/dev/null || chmod -R 777 "$HOME/.cache" 2>/dev/null || true
           fi
           
           echo "Toolcache directory setup complete"
