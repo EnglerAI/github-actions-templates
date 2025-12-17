@@ -65,20 +65,41 @@ jobs:
     if: inputs.run_flake8
     runs-on: ${{ inputs.runner || 'self-hosted' }}
     steps:
-      - name: Fix gitconfig permissions
+      - name: Fix gitconfig and directory permissions
         run: |
-          # Fix permissions on .gitconfig to prevent checkout errors
-          # This is needed for self-hosted runners where .gitconfig may have wrong permissions
+          # Fix permissions to prevent checkout errors on self-hosted runners
+          # The checkout action needs access to .gitconfig and .local/bin directories
+          
+          # Fix home directory permissions
+          if command -v sudo >/dev/null 2>&1; then
+            sudo chmod 755 "$HOME" 2>/dev/null || chmod 755 "$HOME" 2>/dev/null || true
+          else
+            chmod 755 "$HOME" 2>/dev/null || true
+          fi
+          
+          # Fix .gitconfig permissions if it exists
           if [ -f "$HOME/.gitconfig" ]; then
-            # Try to fix permissions - use sudo if available, otherwise try without
             if command -v sudo >/dev/null 2>&1; then
               sudo chmod 644 "$HOME/.gitconfig" 2>/dev/null || chmod 644 "$HOME/.gitconfig" 2>/dev/null || true
             else
               chmod 644 "$HOME/.gitconfig" 2>/dev/null || true
             fi
           fi
-          # Ensure home directory is accessible
-          chmod 755 "$HOME" 2>/dev/null || true
+          
+          # Fix .local directory permissions (checkout action checks for git here)
+          if [ -d "$HOME/.local" ]; then
+            if command -v sudo >/dev/null 2>&1; then
+              sudo chmod -R 755 "$HOME/.local" 2>/dev/null || chmod -R 755 "$HOME/.local" 2>/dev/null || true
+            else
+              chmod -R 755 "$HOME/.local" 2>/dev/null || true
+            fi
+          fi
+          
+          # Ensure .local/bin exists and is accessible (common location for user-installed tools)
+          mkdir -p "$HOME/.local/bin" 2>/dev/null || true
+          if [ -d "$HOME/.local/bin" ]; then
+            chmod 755 "$HOME/.local/bin" 2>/dev/null || true
+          fi
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -204,20 +225,41 @@ jobs:
     if: inputs.run_mypy
     runs-on: ${{ inputs.runner || 'self-hosted' }}
     steps:
-      - name: Fix gitconfig permissions
+      - name: Fix gitconfig and directory permissions
         run: |
-          # Fix permissions on .gitconfig to prevent checkout errors
-          # This is needed for self-hosted runners where .gitconfig may have wrong permissions
+          # Fix permissions to prevent checkout errors on self-hosted runners
+          # The checkout action needs access to .gitconfig and .local/bin directories
+          
+          # Fix home directory permissions
+          if command -v sudo >/dev/null 2>&1; then
+            sudo chmod 755 "$HOME" 2>/dev/null || chmod 755 "$HOME" 2>/dev/null || true
+          else
+            chmod 755 "$HOME" 2>/dev/null || true
+          fi
+          
+          # Fix .gitconfig permissions if it exists
           if [ -f "$HOME/.gitconfig" ]; then
-            # Try to fix permissions - use sudo if available, otherwise try without
             if command -v sudo >/dev/null 2>&1; then
               sudo chmod 644 "$HOME/.gitconfig" 2>/dev/null || chmod 644 "$HOME/.gitconfig" 2>/dev/null || true
             else
               chmod 644 "$HOME/.gitconfig" 2>/dev/null || true
             fi
           fi
-          # Ensure home directory is accessible
-          chmod 755 "$HOME" 2>/dev/null || true
+          
+          # Fix .local directory permissions (checkout action checks for git here)
+          if [ -d "$HOME/.local" ]; then
+            if command -v sudo >/dev/null 2>&1; then
+              sudo chmod -R 755 "$HOME/.local" 2>/dev/null || chmod -R 755 "$HOME/.local" 2>/dev/null || true
+            else
+              chmod -R 755 "$HOME/.local" 2>/dev/null || true
+            fi
+          fi
+          
+          # Ensure .local/bin exists and is accessible (common location for user-installed tools)
+          mkdir -p "$HOME/.local/bin" 2>/dev/null || true
+          if [ -d "$HOME/.local/bin" ]; then
+            chmod 755 "$HOME/.local/bin" 2>/dev/null || true
+          fi
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -371,20 +413,41 @@ jobs:
     if: inputs.run_cfn_lint
     runs-on: ${{ inputs.runner || 'self-hosted' }}
     steps:
-      - name: Fix gitconfig permissions
+      - name: Fix gitconfig and directory permissions
         run: |
-          # Fix permissions on .gitconfig to prevent checkout errors
-          # This is needed for self-hosted runners where .gitconfig may have wrong permissions
+          # Fix permissions to prevent checkout errors on self-hosted runners
+          # The checkout action needs access to .gitconfig and .local/bin directories
+          
+          # Fix home directory permissions
+          if command -v sudo >/dev/null 2>&1; then
+            sudo chmod 755 "$HOME" 2>/dev/null || chmod 755 "$HOME" 2>/dev/null || true
+          else
+            chmod 755 "$HOME" 2>/dev/null || true
+          fi
+          
+          # Fix .gitconfig permissions if it exists
           if [ -f "$HOME/.gitconfig" ]; then
-            # Try to fix permissions - use sudo if available, otherwise try without
             if command -v sudo >/dev/null 2>&1; then
               sudo chmod 644 "$HOME/.gitconfig" 2>/dev/null || chmod 644 "$HOME/.gitconfig" 2>/dev/null || true
             else
               chmod 644 "$HOME/.gitconfig" 2>/dev/null || true
             fi
           fi
-          # Ensure home directory is accessible
-          chmod 755 "$HOME" 2>/dev/null || true
+          
+          # Fix .local directory permissions (checkout action checks for git here)
+          if [ -d "$HOME/.local" ]; then
+            if command -v sudo >/dev/null 2>&1; then
+              sudo chmod -R 755 "$HOME/.local" 2>/dev/null || chmod -R 755 "$HOME/.local" 2>/dev/null || true
+            else
+              chmod -R 755 "$HOME/.local" 2>/dev/null || true
+            fi
+          fi
+          
+          # Ensure .local/bin exists and is accessible (common location for user-installed tools)
+          mkdir -p "$HOME/.local/bin" 2>/dev/null || true
+          if [ -d "$HOME/.local/bin" ]; then
+            chmod 755 "$HOME/.local/bin" 2>/dev/null || true
+          fi
 
       - name: Checkout code
         uses: actions/checkout@v4
