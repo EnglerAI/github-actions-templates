@@ -108,30 +108,58 @@ jobs:
         run: |
           # Create toolcache directory structure for setup-python action on self-hosted runners
           # The setup-python action needs this directory to cache Python versions
+          # The runner user must be able to create subdirectories here
           TOOLCACHE_DIR="/opt/hostedtoolcache"
+          RUNNER_USER="${USER:-runner}"
+          
           if [ ! -d "$TOOLCACHE_DIR" ]; then
             echo "Creating toolcache directory: $TOOLCACHE_DIR"
             if command -v sudo >/dev/null 2>&1; then
               sudo mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || true
-              sudo chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+              sudo chmod 777 "$TOOLCACHE_DIR" 2>/dev/null || sudo chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || chmod 777 "$TOOLCACHE_DIR" 2>/dev/null || true
+              # Try to change ownership to runner user
+              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$TOOLCACHE_DIR" 2>/dev/null || true
             else
               mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || true
-              chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+              chmod 777 "$TOOLCACHE_DIR" 2>/dev/null || chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+            fi
+          else
+            # Directory exists - ensure it's writable
+            if command -v sudo >/dev/null 2>&1; then
+              sudo chmod 777 "$TOOLCACHE_DIR" 2>/dev/null || sudo chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$TOOLCACHE_DIR" 2>/dev/null || true
+            else
+              chmod 777 "$TOOLCACHE_DIR" 2>/dev/null || chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
             fi
           fi
           
-          # Ensure Python subdirectory is accessible
+          # Ensure Python subdirectory exists and is writable
           PYTHON_CACHE_DIR="$TOOLCACHE_DIR/Python"
           if [ ! -d "$PYTHON_CACHE_DIR" ]; then
             echo "Creating Python toolcache directory: $PYTHON_CACHE_DIR"
             if command -v sudo >/dev/null 2>&1; then
               sudo mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || true
-              sudo chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              sudo chmod 777 "$PYTHON_CACHE_DIR" 2>/dev/null || sudo chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PYTHON_CACHE_DIR" 2>/dev/null || true
             else
               mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || true
-              chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              chmod 777 "$PYTHON_CACHE_DIR" 2>/dev/null || chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+            fi
+          else
+            # Directory exists - ensure it's writable
+            if command -v sudo >/dev/null 2>&1; then
+              sudo chmod 777 "$PYTHON_CACHE_DIR" 2>/dev/null || sudo chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PYTHON_CACHE_DIR" 2>/dev/null || true
+            else
+              chmod 777 "$PYTHON_CACHE_DIR" 2>/dev/null || chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
             fi
           fi
+          
+          echo "Toolcache directory setup complete"
+          echo "TOOLCACHE_DIR: $TOOLCACHE_DIR"
+          echo "PYTHON_CACHE_DIR: $PYTHON_CACHE_DIR"
+          echo "RUNNER_USER: $RUNNER_USER"
+          ls -la "$TOOLCACHE_DIR" 2>/dev/null || echo "Cannot list toolcache directory"
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -297,30 +325,58 @@ jobs:
         run: |
           # Create toolcache directory structure for setup-python action on self-hosted runners
           # The setup-python action needs this directory to cache Python versions
+          # The runner user must be able to create subdirectories here
           TOOLCACHE_DIR="/opt/hostedtoolcache"
+          RUNNER_USER="${USER:-runner}"
+          
           if [ ! -d "$TOOLCACHE_DIR" ]; then
             echo "Creating toolcache directory: $TOOLCACHE_DIR"
             if command -v sudo >/dev/null 2>&1; then
               sudo mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || true
-              sudo chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+              sudo chmod 777 "$TOOLCACHE_DIR" 2>/dev/null || sudo chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || chmod 777 "$TOOLCACHE_DIR" 2>/dev/null || true
+              # Try to change ownership to runner user
+              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$TOOLCACHE_DIR" 2>/dev/null || true
             else
               mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || true
-              chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+              chmod 777 "$TOOLCACHE_DIR" 2>/dev/null || chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+            fi
+          else
+            # Directory exists - ensure it's writable
+            if command -v sudo >/dev/null 2>&1; then
+              sudo chmod 777 "$TOOLCACHE_DIR" 2>/dev/null || sudo chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$TOOLCACHE_DIR" 2>/dev/null || true
+            else
+              chmod 777 "$TOOLCACHE_DIR" 2>/dev/null || chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
             fi
           fi
           
-          # Ensure Python subdirectory is accessible
+          # Ensure Python subdirectory exists and is writable
           PYTHON_CACHE_DIR="$TOOLCACHE_DIR/Python"
           if [ ! -d "$PYTHON_CACHE_DIR" ]; then
             echo "Creating Python toolcache directory: $PYTHON_CACHE_DIR"
             if command -v sudo >/dev/null 2>&1; then
               sudo mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || true
-              sudo chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              sudo chmod 777 "$PYTHON_CACHE_DIR" 2>/dev/null || sudo chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PYTHON_CACHE_DIR" 2>/dev/null || true
             else
               mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || true
-              chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              chmod 777 "$PYTHON_CACHE_DIR" 2>/dev/null || chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+            fi
+          else
+            # Directory exists - ensure it's writable
+            if command -v sudo >/dev/null 2>&1; then
+              sudo chmod 777 "$PYTHON_CACHE_DIR" 2>/dev/null || sudo chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PYTHON_CACHE_DIR" 2>/dev/null || true
+            else
+              chmod 777 "$PYTHON_CACHE_DIR" 2>/dev/null || chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
             fi
           fi
+          
+          echo "Toolcache directory setup complete"
+          echo "TOOLCACHE_DIR: $TOOLCACHE_DIR"
+          echo "PYTHON_CACHE_DIR: $PYTHON_CACHE_DIR"
+          echo "RUNNER_USER: $RUNNER_USER"
+          ls -la "$TOOLCACHE_DIR" 2>/dev/null || echo "Cannot list toolcache directory"
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -514,30 +570,58 @@ jobs:
         run: |
           # Create toolcache directory structure for setup-python action on self-hosted runners
           # The setup-python action needs this directory to cache Python versions
+          # The runner user must be able to create subdirectories here
           TOOLCACHE_DIR="/opt/hostedtoolcache"
+          RUNNER_USER="${USER:-runner}"
+          
           if [ ! -d "$TOOLCACHE_DIR" ]; then
             echo "Creating toolcache directory: $TOOLCACHE_DIR"
             if command -v sudo >/dev/null 2>&1; then
               sudo mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || true
-              sudo chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+              sudo chmod 777 "$TOOLCACHE_DIR" 2>/dev/null || sudo chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || chmod 777 "$TOOLCACHE_DIR" 2>/dev/null || true
+              # Try to change ownership to runner user
+              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$TOOLCACHE_DIR" 2>/dev/null || true
             else
               mkdir -p "$TOOLCACHE_DIR" 2>/dev/null || true
-              chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+              chmod 777 "$TOOLCACHE_DIR" 2>/dev/null || chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+            fi
+          else
+            # Directory exists - ensure it's writable
+            if command -v sudo >/dev/null 2>&1; then
+              sudo chmod 777 "$TOOLCACHE_DIR" 2>/dev/null || sudo chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
+              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$TOOLCACHE_DIR" 2>/dev/null || true
+            else
+              chmod 777 "$TOOLCACHE_DIR" 2>/dev/null || chmod 755 "$TOOLCACHE_DIR" 2>/dev/null || true
             fi
           fi
           
-          # Ensure Python subdirectory is accessible
+          # Ensure Python subdirectory exists and is writable
           PYTHON_CACHE_DIR="$TOOLCACHE_DIR/Python"
           if [ ! -d "$PYTHON_CACHE_DIR" ]; then
             echo "Creating Python toolcache directory: $PYTHON_CACHE_DIR"
             if command -v sudo >/dev/null 2>&1; then
               sudo mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || true
-              sudo chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              sudo chmod 777 "$PYTHON_CACHE_DIR" 2>/dev/null || sudo chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PYTHON_CACHE_DIR" 2>/dev/null || true
             else
               mkdir -p "$PYTHON_CACHE_DIR" 2>/dev/null || true
-              chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              chmod 777 "$PYTHON_CACHE_DIR" 2>/dev/null || chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+            fi
+          else
+            # Directory exists - ensure it's writable
+            if command -v sudo >/dev/null 2>&1; then
+              sudo chmod 777 "$PYTHON_CACHE_DIR" 2>/dev/null || sudo chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
+              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PYTHON_CACHE_DIR" 2>/dev/null || true
+            else
+              chmod 777 "$PYTHON_CACHE_DIR" 2>/dev/null || chmod 755 "$PYTHON_CACHE_DIR" 2>/dev/null || true
             fi
           fi
+          
+          echo "Toolcache directory setup complete"
+          echo "TOOLCACHE_DIR: $TOOLCACHE_DIR"
+          echo "PYTHON_CACHE_DIR: $PYTHON_CACHE_DIR"
+          echo "RUNNER_USER: $RUNNER_USER"
+          ls -la "$TOOLCACHE_DIR" 2>/dev/null || echo "Cannot list toolcache directory"
 
       - name: Setup Python
         uses: actions/setup-python@v5
