@@ -156,40 +156,41 @@ jobs:
           fi
           
           # Ensure pip cache directory exists and is writable by the current user
-          # For self-hosted runners, we'll use a user-writable location to avoid ownership issues
-          # The setup-python action with cache: "pip" needs this directory to be writable
+          # The setup-python action with cache: "pip" checks the default cache location
+          # We need to ensure the default location is properly owned and writable
           
-          # Always use a user-writable cache location to avoid ownership/permission issues
-          PIP_CACHE_DIR="$HOME/.local/pip-cache"
+          # Ensure parent .cache directory exists and is writable
+          CACHE_DIR="$HOME/.cache"
+          if [ ! -d "$CACHE_DIR" ]; then
+            echo "Creating cache directory: $CACHE_DIR"
+            mkdir -p "$CACHE_DIR" 2>/dev/null || true
+          fi
           
-          # Ensure the directory exists and is writable
-          mkdir -p "$PIP_CACHE_DIR" 2>/dev/null || true
+          # Fix ownership and permissions on .cache directory
+          if command -v sudo >/dev/null 2>&1; then
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$CACHE_DIR" 2>/dev/null || true
+          fi
+          chmod -R 755 "$CACHE_DIR" 2>/dev/null || chmod -R 777 "$CACHE_DIR" 2>/dev/null || true
+          
+          # Ensure pip cache directory exists
+          PIP_CACHE_DIR="$CACHE_DIR/pip"
+          if [ ! -d "$PIP_CACHE_DIR" ]; then
+            echo "Creating pip cache directory: $PIP_CACHE_DIR"
+            mkdir -p "$PIP_CACHE_DIR" 2>/dev/null || true
+          fi
+          
+          # Fix ownership and permissions on pip cache directory
+          if command -v sudo >/dev/null 2>&1; then
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PIP_CACHE_DIR" 2>/dev/null || true
+          fi
           chmod -R 755 "$PIP_CACHE_DIR" 2>/dev/null || chmod -R 777 "$PIP_CACHE_DIR" 2>/dev/null || true
           
           # Verify it's actually writable by trying to create a test file
           if touch "$PIP_CACHE_DIR/.test_write" 2>/dev/null; then
             rm -f "$PIP_CACHE_DIR/.test_write" 2>/dev/null || true
             echo "✅ Pip cache directory is writable: $PIP_CACHE_DIR"
-            # Set PIP_CACHE_DIR environment variable so pip uses this location
-            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR" >> $GITHUB_ENV
-            export PIP_CACHE_DIR="$PIP_CACHE_DIR"
           else
-            echo "⚠️  Warning: Could not create writable pip cache directory at $PIP_CACHE_DIR"
-            # Try default location as fallback
-            DEFAULT_CACHE_DIR="$HOME/.cache/pip"
-            mkdir -p "$DEFAULT_CACHE_DIR" 2>/dev/null || true
-            if command -v sudo >/dev/null 2>&1; then
-              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$DEFAULT_CACHE_DIR" 2>/dev/null || true
-            fi
-            chmod -R 755 "$DEFAULT_CACHE_DIR" 2>/dev/null || chmod -R 777 "$DEFAULT_CACHE_DIR" 2>/dev/null || true
-            if touch "$DEFAULT_CACHE_DIR/.test_write" 2>/dev/null; then
-              rm -f "$DEFAULT_CACHE_DIR/.test_write" 2>/dev/null || true
-              echo "✅ Using default pip cache directory: $DEFAULT_CACHE_DIR"
-              echo "PIP_CACHE_DIR=$DEFAULT_CACHE_DIR" >> $GITHUB_ENV
-              PIP_CACHE_DIR="$DEFAULT_CACHE_DIR"
-            else
-              echo "⚠️  Warning: Neither cache location is writable, pip cache may not work"
-            fi
+            echo "⚠️  Warning: Pip cache directory may not be fully writable, but continuing"
           fi
           
           echo "Toolcache directory setup complete"
@@ -411,40 +412,41 @@ jobs:
           fi
           
           # Ensure pip cache directory exists and is writable by the current user
-          # For self-hosted runners, we'll use a user-writable location to avoid ownership issues
-          # The setup-python action with cache: "pip" needs this directory to be writable
+          # The setup-python action with cache: "pip" checks the default cache location
+          # We need to ensure the default location is properly owned and writable
           
-          # Always use a user-writable cache location to avoid ownership/permission issues
-          PIP_CACHE_DIR="$HOME/.local/pip-cache"
+          # Ensure parent .cache directory exists and is writable
+          CACHE_DIR="$HOME/.cache"
+          if [ ! -d "$CACHE_DIR" ]; then
+            echo "Creating cache directory: $CACHE_DIR"
+            mkdir -p "$CACHE_DIR" 2>/dev/null || true
+          fi
           
-          # Ensure the directory exists and is writable
-          mkdir -p "$PIP_CACHE_DIR" 2>/dev/null || true
+          # Fix ownership and permissions on .cache directory
+          if command -v sudo >/dev/null 2>&1; then
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$CACHE_DIR" 2>/dev/null || true
+          fi
+          chmod -R 755 "$CACHE_DIR" 2>/dev/null || chmod -R 777 "$CACHE_DIR" 2>/dev/null || true
+          
+          # Ensure pip cache directory exists
+          PIP_CACHE_DIR="$CACHE_DIR/pip"
+          if [ ! -d "$PIP_CACHE_DIR" ]; then
+            echo "Creating pip cache directory: $PIP_CACHE_DIR"
+            mkdir -p "$PIP_CACHE_DIR" 2>/dev/null || true
+          fi
+          
+          # Fix ownership and permissions on pip cache directory
+          if command -v sudo >/dev/null 2>&1; then
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PIP_CACHE_DIR" 2>/dev/null || true
+          fi
           chmod -R 755 "$PIP_CACHE_DIR" 2>/dev/null || chmod -R 777 "$PIP_CACHE_DIR" 2>/dev/null || true
           
           # Verify it's actually writable by trying to create a test file
           if touch "$PIP_CACHE_DIR/.test_write" 2>/dev/null; then
             rm -f "$PIP_CACHE_DIR/.test_write" 2>/dev/null || true
             echo "✅ Pip cache directory is writable: $PIP_CACHE_DIR"
-            # Set PIP_CACHE_DIR environment variable so pip uses this location
-            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR" >> $GITHUB_ENV
-            export PIP_CACHE_DIR="$PIP_CACHE_DIR"
           else
-            echo "⚠️  Warning: Could not create writable pip cache directory at $PIP_CACHE_DIR"
-            # Try default location as fallback
-            DEFAULT_CACHE_DIR="$HOME/.cache/pip"
-            mkdir -p "$DEFAULT_CACHE_DIR" 2>/dev/null || true
-            if command -v sudo >/dev/null 2>&1; then
-              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$DEFAULT_CACHE_DIR" 2>/dev/null || true
-            fi
-            chmod -R 755 "$DEFAULT_CACHE_DIR" 2>/dev/null || chmod -R 777 "$DEFAULT_CACHE_DIR" 2>/dev/null || true
-            if touch "$DEFAULT_CACHE_DIR/.test_write" 2>/dev/null; then
-              rm -f "$DEFAULT_CACHE_DIR/.test_write" 2>/dev/null || true
-              echo "✅ Using default pip cache directory: $DEFAULT_CACHE_DIR"
-              echo "PIP_CACHE_DIR=$DEFAULT_CACHE_DIR" >> $GITHUB_ENV
-              PIP_CACHE_DIR="$DEFAULT_CACHE_DIR"
-            else
-              echo "⚠️  Warning: Neither cache location is writable, pip cache may not work"
-            fi
+            echo "⚠️  Warning: Pip cache directory may not be fully writable, but continuing"
           fi
           
           echo "Toolcache directory setup complete"
@@ -694,40 +696,41 @@ jobs:
           fi
           
           # Ensure pip cache directory exists and is writable by the current user
-          # For self-hosted runners, we'll use a user-writable location to avoid ownership issues
-          # The setup-python action with cache: "pip" needs this directory to be writable
+          # The setup-python action with cache: "pip" checks the default cache location
+          # We need to ensure the default location is properly owned and writable
           
-          # Always use a user-writable cache location to avoid ownership/permission issues
-          PIP_CACHE_DIR="$HOME/.local/pip-cache"
+          # Ensure parent .cache directory exists and is writable
+          CACHE_DIR="$HOME/.cache"
+          if [ ! -d "$CACHE_DIR" ]; then
+            echo "Creating cache directory: $CACHE_DIR"
+            mkdir -p "$CACHE_DIR" 2>/dev/null || true
+          fi
           
-          # Ensure the directory exists and is writable
-          mkdir -p "$PIP_CACHE_DIR" 2>/dev/null || true
+          # Fix ownership and permissions on .cache directory
+          if command -v sudo >/dev/null 2>&1; then
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$CACHE_DIR" 2>/dev/null || true
+          fi
+          chmod -R 755 "$CACHE_DIR" 2>/dev/null || chmod -R 777 "$CACHE_DIR" 2>/dev/null || true
+          
+          # Ensure pip cache directory exists
+          PIP_CACHE_DIR="$CACHE_DIR/pip"
+          if [ ! -d "$PIP_CACHE_DIR" ]; then
+            echo "Creating pip cache directory: $PIP_CACHE_DIR"
+            mkdir -p "$PIP_CACHE_DIR" 2>/dev/null || true
+          fi
+          
+          # Fix ownership and permissions on pip cache directory
+          if command -v sudo >/dev/null 2>&1; then
+            sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$PIP_CACHE_DIR" 2>/dev/null || true
+          fi
           chmod -R 755 "$PIP_CACHE_DIR" 2>/dev/null || chmod -R 777 "$PIP_CACHE_DIR" 2>/dev/null || true
           
           # Verify it's actually writable by trying to create a test file
           if touch "$PIP_CACHE_DIR/.test_write" 2>/dev/null; then
             rm -f "$PIP_CACHE_DIR/.test_write" 2>/dev/null || true
             echo "✅ Pip cache directory is writable: $PIP_CACHE_DIR"
-            # Set PIP_CACHE_DIR environment variable so pip uses this location
-            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR" >> $GITHUB_ENV
-            export PIP_CACHE_DIR="$PIP_CACHE_DIR"
           else
-            echo "⚠️  Warning: Could not create writable pip cache directory at $PIP_CACHE_DIR"
-            # Try default location as fallback
-            DEFAULT_CACHE_DIR="$HOME/.cache/pip"
-            mkdir -p "$DEFAULT_CACHE_DIR" 2>/dev/null || true
-            if command -v sudo >/dev/null 2>&1; then
-              sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$DEFAULT_CACHE_DIR" 2>/dev/null || true
-            fi
-            chmod -R 755 "$DEFAULT_CACHE_DIR" 2>/dev/null || chmod -R 777 "$DEFAULT_CACHE_DIR" 2>/dev/null || true
-            if touch "$DEFAULT_CACHE_DIR/.test_write" 2>/dev/null; then
-              rm -f "$DEFAULT_CACHE_DIR/.test_write" 2>/dev/null || true
-              echo "✅ Using default pip cache directory: $DEFAULT_CACHE_DIR"
-              echo "PIP_CACHE_DIR=$DEFAULT_CACHE_DIR" >> $GITHUB_ENV
-              PIP_CACHE_DIR="$DEFAULT_CACHE_DIR"
-            else
-              echo "⚠️  Warning: Neither cache location is writable, pip cache may not work"
-            fi
+            echo "⚠️  Warning: Pip cache directory may not be fully writable, but continuing"
           fi
           
           echo "Toolcache directory setup complete"
