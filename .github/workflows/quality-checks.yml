@@ -67,8 +67,9 @@ jobs:
     steps:
       - name: Configure Git (for self-hosted runners)
         run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
+          # Configure git if not already configured (may fail on self-hosted runners due to permissions)
+          git config --global user.name "GitHub Actions" 2>/dev/null || echo "Note: Could not set git user.name (may already be configured or permission denied)" || true
+          git config --global user.email "actions@github.com" 2>/dev/null || echo "Note: Could not set git user.email (may already be configured or permission denied)" || true
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -196,8 +197,9 @@ jobs:
     steps:
       - name: Configure Git (for self-hosted runners)
         run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
+          # Configure git if not already configured (may fail on self-hosted runners due to permissions)
+          git config --global user.name "GitHub Actions" 2>/dev/null || echo "Note: Could not set git user.name (may already be configured or permission denied)" || true
+          git config --global user.email "actions@github.com" 2>/dev/null || echo "Note: Could not set git user.email (may already be configured or permission denied)" || true
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -353,8 +355,9 @@ jobs:
     steps:
       - name: Configure Git (for self-hosted runners)
         run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
+          # Configure git if not already configured (may fail on self-hosted runners due to permissions)
+          git config --global user.name "GitHub Actions" 2>/dev/null || echo "Note: Could not set git user.name (may already be configured or permission denied)" || true
+          git config --global user.email "actions@github.com" 2>/dev/null || echo "Note: Could not set git user.email (may already be configured or permission denied)" || true
 
       - name: Checkout code
         uses: actions/checkout@v4
