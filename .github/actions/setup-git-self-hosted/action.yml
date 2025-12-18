@@ -1,0 +1,17 @@
+name: 'Setup Git for Self-Hosted Runners'
+description: 'Configures Git for self-hosted runners with proper HOME directory and safe.directory settings'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Configure Git
+      shell: bash
+      run: |
+        mkdir -p "$HOME"
+        git config --global --add safe.directory '*' || true
+        git config --global user.name "GitHub Actions" || true
+        git config --global user.email "actions@github.com" || true
+      continue-on-error: true
+      env:
+        HOME: ${{ github.workspace }}/.home
+

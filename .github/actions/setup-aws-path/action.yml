@@ -1,0 +1,21 @@
+name: 'Setup AWS CLI Path'
+description: 'Ensures AWS CLI and SAM CLI are in PATH for subsequent steps'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup AWS CLI Path
+      shell: bash
+      run: |
+        # Ensure basic system PATH is available
+        export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+        # Add user bin to PATH if AWS CLI/SAM was installed there
+        if [ -f "$HOME/.local/bin/aws" ]; then
+          export PATH="$HOME/.local/bin:$PATH"
+        fi
+        if [ -f "$HOME/sam-venv/bin/sam" ]; then
+          export PATH="$HOME/sam-venv/bin:$PATH"
+        fi
+      env:
+        HOME: ${{ github.workspace }}/.home
+
