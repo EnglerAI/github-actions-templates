@@ -561,33 +561,78 @@ jobs:
             echo "AWS CLI is already installed: $(aws --version)"
           else
             echo "=== Installing AWS CLI ==="
+            AWS_CLI_INSTALLED=false
+
             # Try installing via pip first (works well on self-hosted runners)
             if command -v python3 &> /dev/null && python3 -m pip --version &>/dev/null; then
-              python3 -m pip install --user awscli || python3 -m pip install awscli
-              # Add user bin to PATH if installed with --user
-              if [ -f "$HOME/.local/bin/aws" ]; then
-                echo "$HOME/.local/bin" >> $GITHUB_PATH
-                export PATH="$HOME/.local/bin:$PATH"
-              fi
-            elif command -v pip3 &> /dev/null; then
-              pip3 install --user awscli || pip3 install awscli
-              if [ -f "$HOME/.local/bin/aws" ]; then
-                echo "$HOME/.local/bin" >> $GITHUB_PATH
-                export PATH="$HOME/.local/bin:$PATH"
-              fi
-            else
-              # Fallback to package manager
-              if command -v /usr/bin/apt-get &> /dev/null; then
-                sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y awscli || true
-              elif command -v /usr/bin/yum &> /dev/null; then
-                sudo /usr/bin/yum install -y awscli || true
+              echo "Attempting to install AWS CLI via pip..."
+              if python3 -m pip install --user awscli 2>&1 || python3 -m pip install awscli 2>&1; then
+                # Add user bin to PATH if installed with --user
+                if [ -f "$HOME/.local/bin/aws" ]; then
+                  echo "$HOME/.local/bin" >> $GITHUB_PATH
+                  export PATH="$HOME/.local/bin:$PATH"
+                fi
+                # Verify it's actually available
+                if command -v aws &> /dev/null; then
+                  AWS_CLI_INSTALLED=true
+                  echo "✅ AWS CLI installed via pip: $(aws --version)"
+                fi
               fi
             fi
-            # Verify installation
-            if command -v aws &> /dev/null; then
-              echo "✅ AWS CLI installed: $(aws --version)"
-            else
-              echo "❌ Failed to install AWS CLI"
+
+            # If pip installation failed, try AWS CLI v2 installer
+            if [ "$AWS_CLI_INSTALLED" = false ]; then
+              echo "Pip installation failed or not available, trying AWS CLI v2 installer..."
+              ARCH=$(uname -m)
+              if [ "$ARCH" = "x86_64" ]; then
+                ARCH="x86_64"
+              elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+                ARCH="aarch64"
+              else
+                ARCH="x86_64"  # Default fallback
+              fi
+
+              INSTALL_DIR="$HOME/aws-cli"
+              mkdir -p "$INSTALL_DIR"
+              
+              # Download and install AWS CLI v2
+              if curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-${ARCH}.zip" -o /tmp/awscliv2.zip; then
+                if command -v unzip &> /dev/null || (command -v /usr/bin/apt-get &> /dev/null && sudo /usr/bin/apt-get install -y unzip); then
+                  unzip -q /tmp/awscliv2.zip -d /tmp/
+                  if [ -f /tmp/aws/install ]; then
+                    /tmp/aws/install -i "$INSTALL_DIR" -b "$HOME/.local/bin" 2>&1
+                    echo "$HOME/.local/bin" >> $GITHUB_PATH
+                    export PATH="$HOME/.local/bin:$PATH"
+                    rm -rf /tmp/aws /tmp/awscliv2.zip
+                    # Verify installation
+                    if command -v aws &> /dev/null; then
+                      AWS_CLI_INSTALLED=true
+                      echo "✅ AWS CLI v2 installed: $(aws --version)"
+                    fi
+                  fi
+                fi
+              fi
+            fi
+
+            # Last resort: try package manager (but don't fail if it's not available)
+            if [ "$AWS_CLI_INSTALLED" = false ]; then
+              echo "Trying package manager as last resort..."
+              if command -v /usr/bin/apt-get &> /dev/null; then
+                sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y awscli 2>&1 || echo "Package manager installation failed (package may not be available)"
+              elif command -v /usr/bin/yum &> /dev/null; then
+                sudo /usr/bin/yum install -y awscli 2>&1 || echo "Package manager installation failed (package may not be available)"
+              fi
+              # Check if it worked
+              if command -v aws &> /dev/null; then
+                AWS_CLI_INSTALLED=true
+                echo "✅ AWS CLI installed via package manager: $(aws --version)"
+              fi
+            fi
+
+            # Final verification
+            if [ "$AWS_CLI_INSTALLED" = false ]; then
+              echo "❌ Failed to install AWS CLI using all available methods"
+              echo "   Attempted: pip, AWS CLI v2 installer, package manager"
               exit 1
             fi
           fi
