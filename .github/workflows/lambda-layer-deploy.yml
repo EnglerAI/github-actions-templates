@@ -63,7 +63,17 @@ on:
 jobs:
   package:
     runs-on: ${{ inputs.runner || 'self-hosted' }}
+    env:
+      HOME: ${{ github.workspace }}/.home
     steps:
+      - name: Configure Git (for self-hosted runners)
+        run: |
+          mkdir -p "$HOME"
+          git config --global --add safe.directory '*' || true
+          git config --global user.name "GitHub Actions" || true
+          git config --global user.email "actions@github.com" || true
+        continue-on-error: true
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -145,6 +155,8 @@ jobs:
       always() && 
       (needs.package.result == 'success')
     runs-on: ${{ inputs.runner || 'self-hosted' }}
+    env:
+      HOME: ${{ github.workspace }}/.home
     outputs:
       stack_name: ${{ steps.deploy.outputs.stack_name }}
       layer_arn: ${{ steps.deploy.outputs.layer_arn }}
@@ -156,6 +168,14 @@ jobs:
       contents: read
 
     steps:
+      - name: Configure Git (for self-hosted runners)
+        run: |
+          mkdir -p "$HOME"
+          git config --global --add safe.directory '*' || true
+          git config --global user.name "GitHub Actions" || true
+          git config --global user.email "actions@github.com" || true
+        continue-on-error: true
+
       - name: Checkout code
         uses: actions/checkout@v4
 

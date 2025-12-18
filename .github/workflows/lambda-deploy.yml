@@ -85,7 +85,17 @@ jobs:
   test:
     if: inputs.run_tests
     runs-on: ${{ inputs.runner || 'self-hosted' }}
+    env:
+      HOME: ${{ github.workspace }}/.home
     steps:
+      - name: Configure Git (for self-hosted runners)
+        run: |
+          mkdir -p "$HOME"
+          git config --global --add safe.directory '*' || true
+          git config --global user.name "GitHub Actions" || true
+          git config --global user.email "actions@github.com" || true
+        continue-on-error: true
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -118,7 +128,17 @@ jobs:
       always() &&
       (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ${{ inputs.runner || 'self-hosted' }}
+    env:
+      HOME: ${{ github.workspace }}/.home
     steps:
+      - name: Configure Git (for self-hosted runners)
+        run: |
+          mkdir -p "$HOME"
+          git config --global --add safe.directory '*' || true
+          git config --global user.name "GitHub Actions" || true
+          git config --global user.email "actions@github.com" || true
+        continue-on-error: true
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -190,6 +210,8 @@ jobs:
       always() &&
       (needs.package.result == 'success')
     runs-on: ${{ inputs.runner || 'self-hosted' }}
+    env:
+      HOME: ${{ github.workspace }}/.home
     outputs:
       stack_name: ${{ steps.deploy.outputs.stack_name }}
       function_name: ${{ steps.deploy.outputs.function_name }}
@@ -201,6 +223,14 @@ jobs:
       contents: read
 
     steps:
+      - name: Configure Git (for self-hosted runners)
+        run: |
+          mkdir -p "$HOME"
+          git config --global --add safe.directory '*' || true
+          git config --global user.name "GitHub Actions" || true
+          git config --global user.email "actions@github.com" || true
+        continue-on-error: true
+
       - name: Debug - Check job context
         run: |
           echo "=== Deploy Job Debug Info ==="
@@ -449,7 +479,7 @@ jobs:
         run: |
           echo "=== Verifying AWS CLI ==="
           AWS_CLI_PATH=""
-          
+
           if command -v aws &> /dev/null; then
             echo "✅ AWS CLI found in PATH"
             AWS_CLI_PATH=$(which aws)
@@ -475,14 +505,14 @@ jobs:
               echo "$HOME/.local/bin" >> $GITHUB_PATH
             fi
           fi
-          
+
           # Verify AWS CLI works
           aws --version || {
             echo "❌ AWS CLI verification failed"
             echo "AWS CLI path: ${AWS_CLI_PATH}"
             exit 1
           }
-          
+
           echo "✅ AWS CLI verified at: $(which aws)"
 
       - name: Run smoke test
