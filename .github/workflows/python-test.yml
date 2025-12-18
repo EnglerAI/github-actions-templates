@@ -689,19 +689,19 @@ jobs:
                 const failuresMatch = xmlContent.match(/failures="(\d+)"/);
                 const errorsMatch = xmlContent.match(/errors="(\d+)"/);
                 const skippedMatch = xmlContent.match(/skipped="(\d+)"/);
-                
+
                 if (testsMatch) {
                   const total = parseInt(testsMatch[1], 10);
                   const failures = failuresMatch ? parseInt(failuresMatch[1], 10) : 0;
                   const errors = errorsMatch ? parseInt(errorsMatch[1], 10) : 0;
                   const skippedCount = skippedMatch ? parseInt(skippedMatch[1], 10) : 0;
                   const passedCount = total - failures - errors - skippedCount;
-                  
+
                   tests = total.toString();
                   passed = passedCount.toString();
                   failed = (failures + errors).toString();
                   skipped = skippedCount.toString();
-                  
+
                   console.log(`Parsed test results: ${total} total, ${passedCount} passed, ${failures + errors} failed, ${skippedCount} skipped`);
                   return true;
                 } else {
