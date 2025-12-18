@@ -1,6 +1,12 @@
 name: 'Setup Pip Environment'
 description: 'Creates and activates a virtual environment or sets up pip with --user flag to avoid externally-managed-environment errors'
 
+outputs:
+  pip_cmd:
+    description: 'Command to use for pip (e.g., "pip" or "python3 -m pip")'
+  pip_flag:
+    description: 'Flag to use with pip (e.g., "" or "--user")'
+
 runs:
   using: 'composite'
   steps:
@@ -66,8 +72,10 @@ runs:
           echo "pip_flag=" >> $GITHUB_OUTPUT
           echo "✅ Set pip_cmd=pip, pip_flag=(empty)"
         elif [ -f "$VENV_DIR/bin/activate" ]; then
-          # Venv exists but no pip - try to use system pip with --user
-          echo "Warning: Virtual environment created but pip not available, using --user flag"
+          # Venv exists but no pip - deactivate and use system pip with --user
+          echo "Warning: Virtual environment created but pip not available"
+          echo "Deactivating venv and using system pip with --user flag"
+          deactivate 2>/dev/null || true
           export PATH="$HOME/.local/bin:$PATH"
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           echo "pip_cmd=$PYTHON_CMD -m pip" >> $GITHUB_OUTPUT
@@ -80,6 +88,14 @@ runs:
           echo "pip_cmd=$PYTHON_CMD -m pip" >> $GITHUB_OUTPUT
           echo "pip_flag=--user" >> $GITHUB_OUTPUT
           echo "✅ Set pip_cmd=$PYTHON_CMD -m pip, pip_flag=--user"
+        fi
+        
+        # Verify outputs were set
+        echo "=== Verifying outputs ==="
+        if [ -f "$VENV_DIR/bin/activate" ] && [ -f "$VENV_DIR/bin/pip" ]; then
+          echo "Expected: pip_cmd=pip, pip_flag=(empty)"
+        else
+          echo "Expected: pip_cmd=$PYTHON_CMD -m pip, pip_flag=--user"
         fi
       env:
         HOME: ${{ github.workspace }}/.home

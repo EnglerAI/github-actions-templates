@@ -89,9 +89,16 @@ jobs:
           PIP_CMD="${{ steps.pip_env.outputs.pip_cmd }}"
           PIP_FLAG="${{ steps.pip_env.outputs.pip_flag }}"
 
-          # Validate that pip_cmd is set
-          if [ -z "${PIP_CMD}" ]; then
-            echo "❌ Error: pip_cmd is empty! Falling back to python3 -m pip"
+          # Check if we're in a virtual environment
+          if [ -n "${VIRTUAL_ENV}" ] || [ -f "$HOME/venv/bin/activate" ]; then
+            echo "✅ Virtual environment detected"
+            # If in venv, use pip directly without --user
+            if [ -z "${PIP_CMD}" ] || [ "${PIP_CMD}" = "" ]; then
+              PIP_CMD="pip"
+            fi
+            PIP_FLAG=""
+          elif [ -z "${PIP_CMD}" ] || [ "${PIP_CMD}" = "" ]; then
+            echo "⚠️  pip_cmd is empty and no venv detected, using python3 -m pip --user"
             PIP_CMD="python3 -m pip"
             PIP_FLAG="--user"
           fi
@@ -99,6 +106,7 @@ jobs:
           # Debug: Show what we got
           echo "PIP_CMD: '${PIP_CMD}'"
           echo "PIP_FLAG: '${PIP_FLAG}'"
+          echo "VIRTUAL_ENV: '${VIRTUAL_ENV}'"
 
           # Upgrade pip in the environment
           if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
@@ -270,9 +278,16 @@ jobs:
           PIP_CMD="${{ steps.pip_env.outputs.pip_cmd }}"
           PIP_FLAG="${{ steps.pip_env.outputs.pip_flag }}"
 
-          # Validate that pip_cmd is set
-          if [ -z "${PIP_CMD}" ]; then
-            echo "❌ Error: pip_cmd is empty! Falling back to python3 -m pip"
+          # Check if we're in a virtual environment
+          if [ -n "${VIRTUAL_ENV}" ] || [ -f "$HOME/venv/bin/activate" ]; then
+            echo "✅ Virtual environment detected"
+            # If in venv, use pip directly without --user
+            if [ -z "${PIP_CMD}" ] || [ "${PIP_CMD}" = "" ]; then
+              PIP_CMD="pip"
+            fi
+            PIP_FLAG=""
+          elif [ -z "${PIP_CMD}" ] || [ "${PIP_CMD}" = "" ]; then
+            echo "⚠️  pip_cmd is empty and no venv detected, using python3 -m pip --user"
             PIP_CMD="python3 -m pip"
             PIP_FLAG="--user"
           fi
@@ -280,6 +295,7 @@ jobs:
           # Debug: Show what we got
           echo "PIP_CMD: '${PIP_CMD}'"
           echo "PIP_FLAG: '${PIP_FLAG}'"
+          echo "VIRTUAL_ENV: '${VIRTUAL_ENV}'"
 
           # Upgrade pip in the environment
           if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
@@ -484,9 +500,16 @@ jobs:
           PIP_CMD="${{ steps.pip_env.outputs.pip_cmd }}"
           PIP_FLAG="${{ steps.pip_env.outputs.pip_flag }}"
 
-          # Validate that pip_cmd is set
-          if [ -z "${PIP_CMD}" ]; then
-            echo "❌ Error: pip_cmd is empty! Falling back to python3 -m pip"
+          # Check if we're in a virtual environment
+          if [ -n "${VIRTUAL_ENV}" ] || [ -f "$HOME/venv/bin/activate" ]; then
+            echo "✅ Virtual environment detected"
+            # If in venv, use pip directly without --user
+            if [ -z "${PIP_CMD}" ] || [ "${PIP_CMD}" = "" ]; then
+              PIP_CMD="pip"
+            fi
+            PIP_FLAG=""
+          elif [ -z "${PIP_CMD}" ] || [ "${PIP_CMD}" = "" ]; then
+            echo "⚠️  pip_cmd is empty and no venv detected, using python3 -m pip --user"
             PIP_CMD="python3 -m pip"
             PIP_FLAG="--user"
           fi
@@ -494,6 +517,7 @@ jobs:
           # Debug: Show what we got
           echo "PIP_CMD: '${PIP_CMD}'"
           echo "PIP_FLAG: '${PIP_FLAG}'"
+          echo "VIRTUAL_ENV: '${VIRTUAL_ENV}'"
 
           # Upgrade pip in the environment
           if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
