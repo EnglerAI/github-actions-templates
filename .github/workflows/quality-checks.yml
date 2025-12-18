@@ -285,8 +285,10 @@ jobs:
         run: |
           echo "=== Running Flake8 (Code) ==="
           # Matches GitLab: --format=pylint --extend-exclude=test*.py --extend-ignore=D
-          flake8 --format=pylint \
-            --extend-exclude=test*.py \
+          # Exclude venv, site-packages, and other directories that shouldn't be scanned
+          # Explicitly scan current directory (.) to avoid scanning parent directories
+          flake8 . --format=pylint \
+            --extend-exclude=test*.py,.home,venv,.venv,site-packages,__pycache__,.git \
             --extend-ignore=D \
             --output-file=flakereport.txt \
             --tee \
@@ -297,8 +299,10 @@ jobs:
         run: |
           echo "=== Running Flake8 (Tests) ==="
           # Matches GitLab: excludes lambda files, focuses on test files
-          flake8 --format=pylint \
-            --extend-exclude=lambda*.py,app.py,models.py,routes/*.py,services/*.py,workers/*.py,apps/*.py \
+          # Exclude venv, site-packages, and other directories that shouldn't be scanned
+          # Explicitly scan current directory (.) to avoid scanning parent directories
+          flake8 . --format=pylint \
+            --extend-exclude=lambda*.py,app.py,models.py,routes/*.py,services/*.py,workers/*.py,apps/*.py,.home,venv,.venv,site-packages,__pycache__,.git \
             --extend-ignore=D \
             --output-file=flaketestreport.txt \
             --tee \
@@ -309,8 +313,10 @@ jobs:
         run: |
           echo "=== Running Flake8 (Docs - Code) ==="
           # Matches GitLab: --extend-ignore=E,F,W (only docstring checks)
-          flake8 --format=pylint \
-            --extend-exclude=test*.py \
+          # Exclude venv, site-packages, and other directories that shouldn't be scanned
+          # Explicitly scan current directory (.) to avoid scanning parent directories
+          flake8 . --format=pylint \
+            --extend-exclude=test*.py,.home,venv,.venv,site-packages,__pycache__,.git \
             --extend-ignore=E,F,W \
             --output-file=flakedocsreport.txt \
             --tee \
@@ -320,8 +326,10 @@ jobs:
         working-directory: ${{ inputs.working_directory }}
         run: |
           echo "=== Running Flake8 (Docs - Tests) ==="
-          flake8 --format=pylint \
-            --extend-exclude=lambda*.py,app.py,models.py,routes/*.py,services/*.py,workers/*.py,apps/*.py \
+          # Exclude venv, site-packages, and other directories that shouldn't be scanned
+          # Explicitly scan current directory (.) to avoid scanning parent directories
+          flake8 . --format=pylint \
+            --extend-exclude=lambda*.py,app.py,models.py,routes/*.py,services/*.py,workers/*.py,apps/*.py,.home,venv,.venv,site-packages,__pycache__,.git \
             --extend-ignore=E,F,W \
             --output-file=flakedocstestreport.txt \
             --tee \
