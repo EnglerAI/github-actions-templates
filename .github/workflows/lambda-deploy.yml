@@ -551,17 +551,91 @@ jobs:
           aws-region: ${{ inputs.aws_region }}
           role-session-name: github-actions-lambda-deploy
 
+      - name: Install AWS CLI and jq
+        run: |
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
+          # Check if AWS CLI is already installed
+          if command -v aws &> /dev/null; then
+            echo "AWS CLI is already installed: $(aws --version)"
+          else
+            echo "=== Installing AWS CLI ==="
+            # Try installing via pip first (works well on self-hosted runners)
+            if command -v python3 &> /dev/null && python3 -m pip --version &>/dev/null; then
+              python3 -m pip install --user awscli || python3 -m pip install awscli
+              # Add user bin to PATH if installed with --user
+              if [ -f "$HOME/.local/bin/aws" ]; then
+                echo "$HOME/.local/bin" >> $GITHUB_PATH
+                export PATH="$HOME/.local/bin:$PATH"
+              fi
+            elif command -v pip3 &> /dev/null; then
+              pip3 install --user awscli || pip3 install awscli
+              if [ -f "$HOME/.local/bin/aws" ]; then
+                echo "$HOME/.local/bin" >> $GITHUB_PATH
+                export PATH="$HOME/.local/bin:$PATH"
+              fi
+            else
+              # Fallback to package manager
+              if command -v /usr/bin/apt-get &> /dev/null; then
+                sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y awscli || true
+              elif command -v /usr/bin/yum &> /dev/null; then
+                sudo /usr/bin/yum install -y awscli || true
+              fi
+            fi
+            # Verify installation
+            if command -v aws &> /dev/null; then
+              echo "✅ AWS CLI installed: $(aws --version)"
+            else
+              echo "❌ Failed to install AWS CLI"
+              exit 1
+            fi
+          fi
+
+          # Check if jq is already installed
+          if command -v jq &> /dev/null; then
+            echo "jq is already installed: $(jq --version)"
+          else
+            echo "=== Installing jq ==="
+            if command -v /usr/bin/apt-get &> /dev/null; then
+              sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y jq || true
+            elif command -v /usr/bin/yum &> /dev/null; then
+              sudo /usr/bin/yum install -y jq || true
+            fi
+            # Verify installation
+            if command -v jq &> /dev/null; then
+              echo "✅ jq installed: $(jq --version)"
+            else
+              echo "⚠️  Warning: jq installation failed, but continuing..."
+            fi
+          fi
+        env:
+          HOME: ${{ github.workspace }}/.home
+
       - name: Verify AWS Identity and Account
         run: |
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+          # Add user bin to PATH if AWS CLI was installed there
+          if [ -f "$HOME/.local/bin/aws" ]; then
+            export PATH="$HOME/.local/bin:$PATH"
+          fi
+
           echo "=== AWS Identity Verification ==="
 
           # Get full caller identity
           IDENTITY=$(aws sts get-caller-identity)
           echo "$IDENTITY"
 
-          # Extract account ID
-          ACTUAL_ACCOUNT=$(echo "$IDENTITY" | jq -r .Account)
-          ACTUAL_ARN=$(echo "$IDENTITY" | jq -r .Arn)
+          # Extract account ID (use Python if jq is not available)
+          if command -v jq &> /dev/null; then
+            ACTUAL_ACCOUNT=$(echo "$IDENTITY" | jq -r .Account)
+            ACTUAL_ARN=$(echo "$IDENTITY" | jq -r .Arn)
+          else
+            # Fallback to Python for JSON parsing
+            ACTUAL_ACCOUNT=$(echo "$IDENTITY" | python3 -c "import sys, json; print(json.load(sys.stdin)['Account'])" 2>/dev/null || echo "")
+            ACTUAL_ARN=$(echo "$IDENTITY" | python3 -c "import sys, json; print(json.load(sys.stdin)['Arn'])" 2>/dev/null || echo "")
+          fi
 
           echo ""
           echo "=== Identity Details ==="
@@ -585,6 +659,13 @@ jobs:
       - name: Test S3 Permissions
         if: inputs.verify_s3_permissions
         run: |
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+          # Add user bin to PATH if AWS CLI was installed there
+          if [ -f "$HOME/.local/bin/aws" ]; then
+            export PATH="$HOME/.local/bin:$PATH"
+          fi
+
           echo "=== Testing S3 Permissions ==="
 
           ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${{ inputs.aws_region }}-${{ secrets.aws_account_id }}"
@@ -768,6 +849,13 @@ jobs:
 
       - name: Upload to S3
         run: |
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+          # Add user bin to PATH if AWS CLI was installed there
+          if [ -f "$HOME/.local/bin/aws" ]; then
+            export PATH="$HOME/.local/bin:$PATH"
+          fi
+
           echo "=== Uploading to S3 ==="
 
           # S3 bucket for artifacts (matches GitLab CI/CD approach)
@@ -846,6 +934,13 @@ jobs:
       - name: Get function info
         id: deploy
         run: |
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+          # Add user bin to PATH if AWS CLI was installed there
+          if [ -f "$HOME/.local/bin/aws" ]; then
+            export PATH="$HOME/.local/bin:$PATH"
+          fi
+
           echo "=== Lambda Function Info ==="
 
           # Get function name from stack outputs
@@ -935,6 +1030,13 @@ jobs:
 
       - name: Run smoke test
         run: |
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+          # Add user bin to PATH if AWS CLI was installed there
+          if [ -f "$HOME/.local/bin/aws" ]; then
+            export PATH="$HOME/.local/bin:$PATH"
+          fi
+
           echo "=== Running Smoke Test ==="
 
           # Use function name from deploy job output if available

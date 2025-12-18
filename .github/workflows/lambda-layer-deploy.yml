@@ -305,8 +305,57 @@ jobs:
           aws-region: ${{ inputs.aws_region }}
           role-session-name: github-actions-layer-deploy
 
+      - name: Install AWS CLI
+        run: |
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
+          # Check if AWS CLI is already installed
+          if command -v aws &> /dev/null; then
+            echo "AWS CLI is already installed: $(aws --version)"
+          else
+            echo "=== Installing AWS CLI ==="
+            # Try installing via pip first (works well on self-hosted runners)
+            if command -v python3 &> /dev/null && python3 -m pip --version &>/dev/null; then
+              python3 -m pip install --user awscli || python3 -m pip install awscli
+              # Add user bin to PATH if installed with --user
+              if [ -f "$HOME/.local/bin/aws" ]; then
+                echo "$HOME/.local/bin" >> $GITHUB_PATH
+                export PATH="$HOME/.local/bin:$PATH"
+              fi
+            elif command -v pip3 &> /dev/null; then
+              pip3 install --user awscli || pip3 install awscli
+              if [ -f "$HOME/.local/bin/aws" ]; then
+                echo "$HOME/.local/bin" >> $GITHUB_PATH
+                export PATH="$HOME/.local/bin:$PATH"
+              fi
+            else
+              # Fallback to package manager
+              if command -v /usr/bin/apt-get &> /dev/null; then
+                sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y awscli || true
+              elif command -v /usr/bin/yum &> /dev/null; then
+                sudo /usr/bin/yum install -y awscli || true
+              fi
+            fi
+            # Verify installation
+            if command -v aws &> /dev/null; then
+              echo "✅ AWS CLI installed: $(aws --version)"
+            else
+              echo "❌ Failed to install AWS CLI"
+              exit 1
+            fi
+          fi
+        env:
+          HOME: ${{ github.workspace }}/.home
+
       - name: Upload layer package to S3
         run: |
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+          # Add user bin to PATH if AWS CLI was installed there
+          if [ -f "$HOME/.local/bin/aws" ]; then
+            export PATH="$HOME/.local/bin:$PATH"
+          fi
           echo "=== Uploading Layer Package to S3 ==="
 
           # S3 bucket for artifacts (matches GitLab CI/CD approach)
@@ -329,6 +378,13 @@ jobs:
 
       - name: Check existing resources
         run: |
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+          # Add user bin to PATH if AWS CLI was installed there
+          if [ -f "$HOME/.local/bin/aws" ]; then
+            export PATH="$HOME/.local/bin:$PATH"
+          fi
+
           echo "=== Checking Existing Resources ==="
 
           # Determine stack name
@@ -498,6 +554,16 @@ jobs:
       - name: Deploy Lambda Layer with SAM
         id: deploy
         run: |
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+          # Add user bin to PATH if SAM/AWS CLI was installed there
+          if [ -f "$HOME/.local/bin/sam" ]; then
+            export PATH="$HOME/.local/bin:$PATH"
+          fi
+          if [ -f "$HOME/.local/bin/aws" ]; then
+            export PATH="$HOME/.local/bin:$PATH"
+          fi
+
           echo "=== Deploying Lambda Layer with SAM ==="
 
           # Determine stack name
@@ -535,6 +601,13 @@ jobs:
       - name: Get Layer Version ARN
         id: layer
         run: |
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+          # Add user bin to PATH if AWS CLI was installed there
+          if [ -f "$HOME/.local/bin/aws" ]; then
+            export PATH="$HOME/.local/bin:$PATH"
+          fi
+
           echo "=== Getting Layer Version ARN ==="
 
           STACK_NAME="${{ env.stack_name }}"
@@ -565,6 +638,13 @@ jobs:
 
       - name: Verify deployment
         run: |
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+          # Add user bin to PATH if AWS CLI was installed there
+          if [ -f "$HOME/.local/bin/aws" ]; then
+            export PATH="$HOME/.local/bin:$PATH"
+          fi
+
           echo "=== Verifying Layer Deployment ==="
 
           STACK_NAME="${{ env.stack_name }}"
