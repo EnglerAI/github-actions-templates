@@ -64,6 +64,7 @@ runs:
           echo "Virtual environment activated with pip"
           echo "pip_cmd=pip" >> $GITHUB_OUTPUT
           echo "pip_flag=" >> $GITHUB_OUTPUT
+          echo "✅ Set pip_cmd=pip, pip_flag=(empty)"
         elif [ -f "$VENV_DIR/bin/activate" ]; then
           # Venv exists but no pip - try to use system pip with --user
           echo "Warning: Virtual environment created but pip not available, using --user flag"
@@ -71,12 +72,14 @@ runs:
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           echo "pip_cmd=$PYTHON_CMD -m pip" >> $GITHUB_OUTPUT
           echo "pip_flag=--user" >> $GITHUB_OUTPUT
+          echo "✅ Set pip_cmd=$PYTHON_CMD -m pip, pip_flag=--user"
         else
           echo "Warning: Virtual environment not created, using --user flag as fallback"
           export PATH="$HOME/.local/bin:$PATH"
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           echo "pip_cmd=$PYTHON_CMD -m pip" >> $GITHUB_OUTPUT
           echo "pip_flag=--user" >> $GITHUB_OUTPUT
+          echo "✅ Set pip_cmd=$PYTHON_CMD -m pip, pip_flag=--user"
         fi
       env:
         HOME: ${{ github.workspace }}/.home

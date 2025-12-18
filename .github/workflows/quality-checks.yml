@@ -85,23 +85,56 @@ jobs:
       - name: Install dependencies
         working-directory: ${{ inputs.working_directory }}
         run: |
+          # Get pip command and flag from previous step
+          PIP_CMD="${{ steps.pip_env.outputs.pip_cmd }}"
+          PIP_FLAG="${{ steps.pip_env.outputs.pip_flag }}"
+
+          # Validate that pip_cmd is set
+          if [ -z "${PIP_CMD}" ]; then
+            echo "❌ Error: pip_cmd is empty! Falling back to python3 -m pip"
+            PIP_CMD="python3 -m pip"
+            PIP_FLAG="--user"
+          fi
+
+          # Debug: Show what we got
+          echo "PIP_CMD: '${PIP_CMD}'"
+          echo "PIP_FLAG: '${PIP_FLAG}'"
+
           # Upgrade pip in the environment
-          ${{ steps.pip_env.outputs.pip_cmd }} install ${{ steps.pip_env.outputs.pip_flag }} --upgrade pip || true
+          if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
+            ${PIP_CMD} install ${PIP_FLAG} --upgrade pip || true
+          else
+            ${PIP_CMD} install --upgrade pip || true
+          fi
 
           if [ -f "${{ inputs.requirements_file }}" ]; then
             # Handle GitLab private packages if token provided
             if [ -n "${{ secrets.gitlab_api_token }}" ]; then
               echo "Installing with GitLab private package access..."
-              ${{ steps.pip_env.outputs.pip_cmd }} install ${{ steps.pip_env.outputs.pip_flag }} \
-                --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
-                -r ${{ inputs.requirements_file }}
+              if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
+                ${PIP_CMD} install ${PIP_FLAG} \
+                  --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
+                  -r ${{ inputs.requirements_file }}
+              else
+                ${PIP_CMD} install \
+                  --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
+                  -r ${{ inputs.requirements_file }}
+              fi
             else
-              ${{ steps.pip_env.outputs.pip_cmd }} install ${{ steps.pip_env.outputs.pip_flag }} -r ${{ inputs.requirements_file }}
+              if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
+                ${PIP_CMD} install ${PIP_FLAG} -r ${{ inputs.requirements_file }}
+              else
+                ${PIP_CMD} install -r ${{ inputs.requirements_file }}
+              fi
             fi
           fi
 
           # Install linting tools (matches GitLab CI)
-          ${{ steps.pip_env.outputs.pip_cmd }} install ${{ steps.pip_env.outputs.pip_flag }} flake8 flake8-docstrings
+          if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
+            ${PIP_CMD} install ${PIP_FLAG} flake8 flake8-docstrings
+          else
+            ${PIP_CMD} install flake8 flake8-docstrings
+          fi
 
       - name: Run flake8 (code)
         working-directory: ${{ inputs.working_directory }}
@@ -233,8 +266,27 @@ jobs:
 
       - name: Install dependencies
         run: |
+          # Get pip command and flag from previous step
+          PIP_CMD="${{ steps.pip_env.outputs.pip_cmd }}"
+          PIP_FLAG="${{ steps.pip_env.outputs.pip_flag }}"
+
+          # Validate that pip_cmd is set
+          if [ -z "${PIP_CMD}" ]; then
+            echo "❌ Error: pip_cmd is empty! Falling back to python3 -m pip"
+            PIP_CMD="python3 -m pip"
+            PIP_FLAG="--user"
+          fi
+
+          # Debug: Show what we got
+          echo "PIP_CMD: '${PIP_CMD}'"
+          echo "PIP_FLAG: '${PIP_FLAG}'"
+
           # Upgrade pip in the environment
-          ${{ steps.pip_env.outputs.pip_cmd }} install ${{ steps.pip_env.outputs.pip_flag }} --upgrade pip || true
+          if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
+            ${PIP_CMD} install ${PIP_FLAG} --upgrade pip || true
+          else
+            ${PIP_CMD} install --upgrade pip || true
+          fi
 
           # Install project dependencies from requirements.txt first
           # This ensures actual packages (like pymysql, requests, etc.) are installed
@@ -257,11 +309,21 @@ jobs:
             echo "Installing dependencies from: $REQ_FILE"
             # Handle GitLab private packages if token provided
             if [ -n "${{ secrets.gitlab_api_token }}" ]; then
-              ${{ steps.pip_env.outputs.pip_cmd }} install ${{ steps.pip_env.outputs.pip_flag }} \
-                --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
-                -r "$REQ_FILE"
+              if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
+                ${PIP_CMD} install ${PIP_FLAG} \
+                  --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
+                  -r "$REQ_FILE"
+              else
+                ${PIP_CMD} install \
+                  --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
+                  -r "$REQ_FILE"
+              fi
             else
-              ${{ steps.pip_env.outputs.pip_cmd }} install ${{ steps.pip_env.outputs.pip_flag }} -r "$REQ_FILE"
+              if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
+                ${PIP_CMD} install ${PIP_FLAG} -r "$REQ_FILE"
+              else
+                ${PIP_CMD} install -r "$REQ_FILE"
+              fi
             fi
           else
             echo "⚠️  Requirements file not found: $REQ_FILE"
@@ -278,18 +340,23 @@ jobs:
           echo "=========================================="
           # Install all mypy dependencies including pymysql and types-PyMySQL
           # Installing pymysql explicitly ensures it's available even if not in requirements.txt
-          echo "Running: ${{ steps.pip_env.outputs.pip_cmd }} install ${{ steps.pip_env.outputs.pip_flag }} pymysql types-PyMySQL awscli lxml mypy boto3-stubs types-beautifulsoup4 types-python-dateutil types-requests"
-          ${{ steps.pip_env.outputs.pip_cmd }} install ${{ steps.pip_env.outputs.pip_flag }} pymysql types-PyMySQL awscli lxml mypy boto3-stubs types-beautifulsoup4 types-python-dateutil types-requests
+          if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
+            echo "Running: ${PIP_CMD} install ${PIP_FLAG} pymysql types-PyMySQL awscli lxml mypy boto3-stubs types-beautifulsoup4 types-python-dateutil types-requests"
+            ${PIP_CMD} install ${PIP_FLAG} pymysql types-PyMySQL awscli lxml mypy boto3-stubs types-beautifulsoup4 types-python-dateutil types-requests
+          else
+            echo "Running: ${PIP_CMD} install pymysql types-PyMySQL awscli lxml mypy boto3-stubs types-beautifulsoup4 types-python-dateutil types-requests"
+            ${PIP_CMD} install pymysql types-PyMySQL awscli lxml mypy boto3-stubs types-beautifulsoup4 types-python-dateutil types-requests
+          fi
           echo "=========================================="
           echo "Type stubs installation completed"
           echo "=========================================="
 
           # Verify pymysql and types-PyMySQL are installed (for debugging)
           echo "=== Verifying installed packages ==="
-          ${{ steps.pip_env.outputs.pip_cmd }} show pymysql && echo "✅ pymysql is installed" || echo "⚠️  pymysql not installed"
-          ${{ steps.pip_env.outputs.pip_cmd }} show types-PyMySQL && echo "✅ types-PyMySQL is installed" || echo "⚠️  types-PyMySQL not installed"
+          ${PIP_CMD} show pymysql && echo "✅ pymysql is installed" || echo "⚠️  pymysql not installed"
+          ${PIP_CMD} show types-PyMySQL && echo "✅ types-PyMySQL is installed" || echo "⚠️  types-PyMySQL not installed"
           echo "=== Installed packages containing 'mysql' or 'mypy' ==="
-          ${{ steps.pip_env.outputs.pip_cmd }} list | grep -iE "(mysql|mypy)" || echo "No matching packages found"
+          ${PIP_CMD} list | grep -iE "(mysql|mypy)" || echo "No matching packages found"
 
           # Verify Python can import pymysql (tests the installation)
           echo "=== Testing pymysql import ==="
@@ -413,11 +480,34 @@ jobs:
 
       - name: Install cfn-lint
         run: |
+          # Get pip command and flag from previous step
+          PIP_CMD="${{ steps.pip_env.outputs.pip_cmd }}"
+          PIP_FLAG="${{ steps.pip_env.outputs.pip_flag }}"
+
+          # Validate that pip_cmd is set
+          if [ -z "${PIP_CMD}" ]; then
+            echo "❌ Error: pip_cmd is empty! Falling back to python3 -m pip"
+            PIP_CMD="python3 -m pip"
+            PIP_FLAG="--user"
+          fi
+
+          # Debug: Show what we got
+          echo "PIP_CMD: '${PIP_CMD}'"
+          echo "PIP_FLAG: '${PIP_FLAG}'"
+
           # Upgrade pip in the environment
-          ${{ steps.pip_env.outputs.pip_cmd }} install ${{ steps.pip_env.outputs.pip_flag }} --upgrade pip || true
+          if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
+            ${PIP_CMD} install ${PIP_FLAG} --upgrade pip || true
+          else
+            ${PIP_CMD} install --upgrade pip || true
+          fi
 
           echo "=== Installing cfn-lint ==="
-          ${{ steps.pip_env.outputs.pip_cmd }} install ${{ steps.pip_env.outputs.pip_flag }} cfn-lint junit-xml
+          if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
+            ${PIP_CMD} install ${PIP_FLAG} cfn-lint junit-xml
+          else
+            ${PIP_CMD} install cfn-lint junit-xml
+          fi
           cfn-lint --version
 
       - name: Find CloudFormation templates
