@@ -588,13 +588,57 @@ jobs:
           fi
 
           echo "=== Installing SAM CLI ==="
-          $PYTHON_CMD -m pip install --user aws-sam-cli || $PYTHON_CMD -m pip install aws-sam-cli
-          # Add user bin to PATH if SAM was installed with --user
-          if [ -f "$HOME/.local/bin/sam" ]; then
-            echo "$HOME/.local/bin" >> $GITHUB_PATH
-            export PATH="$HOME/.local/bin:$PATH"
+
+          # Try installing with --user flag first (avoids externally-managed-environment error)
+          if $PYTHON_CMD -m pip install --user aws-sam-cli 2>&1; then
+            echo "✅ SAM CLI installed with --user flag"
+            # Add user bin to PATH
+            if [ -f "$HOME/.local/bin/sam" ]; then
+              echo "$HOME/.local/bin" >> $GITHUB_PATH
+              export PATH="$HOME/.local/bin:$PATH"
+            fi
+          else
+            echo "⚠️  --user installation failed, trying virtual environment approach..."
+            # Create a virtual environment for SAM CLI
+            VENV_DIR="$HOME/sam-venv"
+            if $PYTHON_CMD -m venv "$VENV_DIR" 2>/dev/null || $PYTHON_CMD -m venv --without-pip "$VENV_DIR" 2>/dev/null; then
+              # Activate venv and install SAM CLI
+              source "$VENV_DIR/bin/activate" 2>/dev/null || true
+              export PATH="$VENV_DIR/bin:$PATH"
+              echo "$VENV_DIR/bin" >> $GITHUB_PATH
+              
+              # Install pip in venv if needed
+              if [ ! -f "$VENV_DIR/bin/pip" ]; then
+                curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || true
+                if [ -f /tmp/get-pip.py ] && [ -f "$VENV_DIR/bin/python" ]; then
+                  "$VENV_DIR/bin/python" /tmp/get-pip.py 2>&1 || true
+                  rm -f /tmp/get-pip.py
+                fi
+              fi
+              
+              # Install SAM CLI in venv
+              if [ -f "$VENV_DIR/bin/pip" ]; then
+                "$VENV_DIR/bin/pip" install aws-sam-cli 2>&1
+                echo "✅ SAM CLI installed in virtual environment"
+              else
+                echo "❌ Failed to install pip in virtual environment"
+                exit 1
+              fi
+            else
+              echo "❌ Failed to create virtual environment and --user installation failed"
+              exit 1
+            fi
           fi
-          sam --version
+
+          # Verify SAM CLI is available
+          if command -v sam &> /dev/null; then
+            sam --version
+          else
+            echo "❌ SAM CLI not found in PATH"
+            exit 1
+          fi
+        env:
+          HOME: ${{ github.workspace }}/.home
 
       - name: Deploy Lambda Layer with SAM
         id: deploy
