@@ -89,19 +89,19 @@ jobs:
       HOME: ${{ github.workspace }}/.home
     steps:
       - name: Setup Git
-        uses: ./.github/actions/setup-git-self-hosted
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-git-self-hosted@main
 
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: ./.github/actions/setup-python-self-hosted
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-python-self-hosted@main
         with:
           python_version: ${{ inputs.python_version }}
 
       - name: Setup Pip Environment
         id: pip_env
-        uses: ./.github/actions/setup-pip-environment
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-pip-environment@main
 
       - name: Install dependencies
         run: |
@@ -134,13 +134,13 @@ jobs:
       HOME: ${{ github.workspace }}/.home
     steps:
       - name: Setup Git
-        uses: ./.github/actions/setup-git-self-hosted
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-git-self-hosted@main
 
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: ./.github/actions/setup-python-self-hosted
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-python-self-hosted@main
         with:
           python_version: ${{ inputs.python_version }}
 
@@ -230,7 +230,7 @@ jobs:
 
     steps:
       - name: Setup Git
-        uses: ./.github/actions/setup-git-self-hosted
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-git-self-hosted@main
 
       - name: Debug - Check job context
         run: |
@@ -260,12 +260,12 @@ jobs:
           role-session-name: github-actions-lambda-deploy
 
       - name: Install AWS CLI and jq
-        uses: ./.github/actions/install-aws-cli
+        uses: EnglerAI/github-actions-templates/.github/actions/install-aws-cli@main
         with:
           install_jq: "true"
 
       - name: Setup AWS Path
-        uses: ./.github/actions/setup-aws-path
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-aws-path@main
 
       - name: Verify AWS Identity and Account
         run: |
@@ -307,7 +307,7 @@ jobs:
 
       - name: Setup AWS Path
         if: inputs.verify_s3_permissions
-        uses: ./.github/actions/setup-aws-path
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-aws-path@main
 
       - name: Test S3 Permissions
         if: inputs.verify_s3_permissions
@@ -364,15 +364,15 @@ jobs:
           echo "✅ All S3 permission tests passed!"
 
       - name: Setup Python
-        uses: ./.github/actions/setup-python-self-hosted
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-python-self-hosted@main
         with:
           python_version: ${{ inputs.python_version }}
 
       - name: Install SAM CLI
-        uses: ./.github/actions/install-sam-cli
+        uses: EnglerAI/github-actions-templates/.github/actions/install-sam-cli@main
 
       - name: Setup AWS Path
-        uses: ./.github/actions/setup-aws-path
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-aws-path@main
 
       - name: Upload to S3
         run: |
@@ -518,12 +518,12 @@ jobs:
           role-session-name: github-actions-smoke-test-${{ github.run_id }}
 
       - name: Install AWS CLI and jq
-        uses: ./.github/actions/install-aws-cli
+        uses: EnglerAI/github-actions-templates/.github/actions/install-aws-cli@main
         with:
           install_jq: "true"
 
       - name: Setup AWS Path
-        uses: ./.github/actions/setup-aws-path
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-aws-path@main
 
       - name: Run smoke test
         run: |

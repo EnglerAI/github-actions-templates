@@ -68,19 +68,19 @@ jobs:
       HOME: ${{ github.workspace }}/.home
     steps:
       - name: Setup Git
-        uses: ./.github/actions/setup-git-self-hosted
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-git-self-hosted@main
 
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: ./.github/actions/setup-python-self-hosted
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-python-self-hosted@main
         with:
           python_version: ${{ inputs.python_version }}
 
       - name: Setup Pip Environment
         id: pip_env
-        uses: ./.github/actions/setup-pip-environment
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-pip-environment@main
 
       - name: Install dependencies
         working-directory: ${{ inputs.working_directory }}
@@ -168,11 +168,11 @@ jobs:
 
       - name: Install AWS CLI
         if: inputs.upload_reports
-        uses: ./.github/actions/install-aws-cli
+        uses: EnglerAI/github-actions-templates/.github/actions/install-aws-cli@main
 
       - name: Setup AWS Path
         if: inputs.upload_reports
-        uses: ./.github/actions/setup-aws-path
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-aws-path@main
 
       - name: Upload flake8 reports to S3
         if: inputs.upload_reports
@@ -217,19 +217,19 @@ jobs:
       HOME: ${{ github.workspace }}/.home
     steps:
       - name: Setup Git
-        uses: ./.github/actions/setup-git-self-hosted
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-git-self-hosted@main
 
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: ./.github/actions/setup-python-self-hosted
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-python-self-hosted@main
         with:
           python_version: ${{ inputs.python_version }}
 
       - name: Setup Pip Environment
         id: pip_env
-        uses: ./.github/actions/setup-pip-environment
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-pip-environment@main
 
       - name: Install dependencies
         run: |
@@ -345,11 +345,11 @@ jobs:
 
       - name: Install AWS CLI
         if: inputs.upload_reports
-        uses: ./.github/actions/install-aws-cli
+        uses: EnglerAI/github-actions-templates/.github/actions/install-aws-cli@main
 
       - name: Setup AWS Path
         if: inputs.upload_reports
-        uses: ./.github/actions/setup-aws-path
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-aws-path@main
 
       - name: Upload mypy reports to S3
         if: inputs.upload_reports && always()
@@ -397,19 +397,19 @@ jobs:
       HOME: ${{ github.workspace }}/.home
     steps:
       - name: Setup Git
-        uses: ./.github/actions/setup-git-self-hosted
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-git-self-hosted@main
 
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: ./.github/actions/setup-python-self-hosted
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-python-self-hosted@main
         with:
           python_version: ${{ inputs.python_version || '3.12' }}
 
       - name: Setup Pip Environment
         id: pip_env
-        uses: ./.github/actions/setup-pip-environment
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-pip-environment@main
 
       - name: Install cfn-lint
         run: |
@@ -542,11 +542,11 @@ jobs:
 
       - name: Install AWS CLI
         if: inputs.upload_reports && steps.find-templates.outputs.templates != ''
-        uses: ./.github/actions/install-aws-cli
+        uses: EnglerAI/github-actions-templates/.github/actions/install-aws-cli@main
 
       - name: Setup AWS Path
         if: inputs.upload_reports && steps.find-templates.outputs.templates != ''
-        uses: ./.github/actions/setup-aws-path
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-aws-path@main
 
       - name: Upload cfn-lint reports to S3
         if: inputs.upload_reports && steps.find-templates.outputs.templates != ''

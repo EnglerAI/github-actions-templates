@@ -67,13 +67,13 @@ jobs:
       HOME: ${{ github.workspace }}/.home
     steps:
       - name: Setup Git
-        uses: ./.github/actions/setup-git-self-hosted
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-git-self-hosted@main
 
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: ./.github/actions/setup-python-self-hosted
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-python-self-hosted@main
         with:
           python_version: ${{ inputs.python_version }}
 
@@ -176,7 +176,7 @@ jobs:
 
     steps:
       - name: Setup Git
-        uses: ./.github/actions/setup-git-self-hosted
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-git-self-hosted@main
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -194,10 +194,10 @@ jobs:
           role-session-name: github-actions-layer-deploy
 
       - name: Install AWS CLI
-        uses: ./.github/actions/install-aws-cli
+        uses: EnglerAI/github-actions-templates/.github/actions/install-aws-cli@main
 
       - name: Setup AWS Path
-        uses: ./.github/actions/setup-aws-path
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-aws-path@main
 
       - name: Upload layer package to S3
         run: |
@@ -260,15 +260,15 @@ jobs:
           fi
 
       - name: Setup Python
-        uses: ./.github/actions/setup-python-self-hosted
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-python-self-hosted@main
         with:
           python_version: ${{ inputs.python_version }}
 
       - name: Install SAM CLI
-        uses: ./.github/actions/install-sam-cli
+        uses: EnglerAI/github-actions-templates/.github/actions/install-sam-cli@main
 
       - name: Setup AWS Path
-        uses: ./.github/actions/setup-aws-path
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-aws-path@main
 
       - name: Deploy Lambda Layer with SAM
         id: deploy
