@@ -1065,6 +1065,8 @@ jobs:
       always() && 
       (needs.deploy.result == 'success')
     runs-on: ${{ inputs.runner || 'self-hosted' }}
+    env:
+      HOME: ${{ github.workspace }}/.home
     permissions:
       id-token: write
       contents: read
@@ -1077,45 +1079,111 @@ jobs:
           aws-region: ${{ inputs.aws_region }}
           role-session-name: github-actions-smoke-test-${{ github.run_id }}
 
-      - name: Verify AWS CLI installation
+      - name: Install AWS CLI and jq
         run: |
-          echo "=== Verifying AWS CLI ==="
-          AWS_CLI_PATH=""
+          # Ensure basic system PATH is available
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
+          # Check if AWS CLI is already installed
           if command -v aws &> /dev/null; then
-            echo "✅ AWS CLI found in PATH"
-            AWS_CLI_PATH=$(which aws)
+            echo "AWS CLI is already installed: $(aws --version)"
           else
-            echo "⚠️  AWS CLI not found in PATH, attempting to locate..."
-            # Check common installation locations
-            if [ -f /usr/local/bin/aws ]; then
-              echo "Found AWS CLI at /usr/local/bin/aws"
-              AWS_CLI_PATH="/usr/local/bin/aws"
-              echo "/usr/local/bin" >> $GITHUB_PATH
-            elif [ -f /usr/bin/aws ]; then
-              echo "Found AWS CLI at /usr/bin/aws"
-              AWS_CLI_PATH="/usr/bin/aws"
-              echo "/usr/bin" >> $GITHUB_PATH
-            elif [ -f "$HOME/.local/bin/aws" ]; then
-              echo "Found AWS CLI at $HOME/.local/bin/aws"
-              AWS_CLI_PATH="$HOME/.local/bin/aws"
-              echo "$HOME/.local/bin" >> $GITHUB_PATH
-            else
-              echo "❌ AWS CLI not found - installing via pip..."
-              pip install --user awscli
-              AWS_CLI_PATH="$HOME/.local/bin/aws"
-              echo "$HOME/.local/bin" >> $GITHUB_PATH
+            echo "=== Installing AWS CLI ==="
+            AWS_CLI_INSTALLED=false
+
+            # Try installing via pip first (works well on self-hosted runners)
+            if command -v python3 &> /dev/null && python3 -m pip --version &>/dev/null; then
+              echo "Attempting to install AWS CLI via pip..."
+              if python3 -m pip install --user awscli 2>&1 || python3 -m pip install awscli 2>&1; then
+                # Add user bin to PATH if installed with --user
+                if [ -f "$HOME/.local/bin/aws" ]; then
+                  echo "$HOME/.local/bin" >> $GITHUB_PATH
+                  export PATH="$HOME/.local/bin:$PATH"
+                fi
+                # Verify it's actually available
+                if command -v aws &> /dev/null; then
+                  AWS_CLI_INSTALLED=true
+                  echo "✅ AWS CLI installed via pip: $(aws --version)"
+                fi
+              fi
+            fi
+
+            # If pip installation failed, try AWS CLI v2 installer
+            if [ "$AWS_CLI_INSTALLED" = false ]; then
+              echo "Pip installation failed or not available, trying AWS CLI v2 installer..."
+              ARCH=$(uname -m)
+              if [ "$ARCH" = "x86_64" ]; then
+                ARCH="x86_64"
+              elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+                ARCH="aarch64"
+              else
+                ARCH="x86_64"  # Default fallback
+              fi
+
+              INSTALL_DIR="$HOME/aws-cli"
+              mkdir -p "$INSTALL_DIR"
+              
+              # Download and install AWS CLI v2
+              if curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-${ARCH}.zip" -o /tmp/awscliv2.zip; then
+                if command -v unzip &> /dev/null || (command -v /usr/bin/apt-get &> /dev/null && sudo /usr/bin/apt-get install -y unzip); then
+                  unzip -q /tmp/awscliv2.zip -d /tmp/
+                  if [ -f /tmp/aws/install ]; then
+                    /tmp/aws/install -i "$INSTALL_DIR" -b "$HOME/.local/bin" 2>&1
+                    echo "$HOME/.local/bin" >> $GITHUB_PATH
+                    export PATH="$HOME/.local/bin:$PATH"
+                    rm -rf /tmp/aws /tmp/awscliv2.zip
+                    # Verify installation
+                    if command -v aws &> /dev/null; then
+                      AWS_CLI_INSTALLED=true
+                      echo "✅ AWS CLI v2 installed: $(aws --version)"
+                    fi
+                  fi
+                fi
+              fi
+            fi
+
+            # Last resort: try package manager (but don't fail if it's not available)
+            if [ "$AWS_CLI_INSTALLED" = false ]; then
+              echo "Trying package manager as last resort..."
+              if command -v /usr/bin/apt-get &> /dev/null; then
+                sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y awscli 2>&1 || echo "Package manager installation failed (package may not be available)"
+              elif command -v /usr/bin/yum &> /dev/null; then
+                sudo /usr/bin/yum install -y awscli 2>&1 || echo "Package manager installation failed (package may not be available)"
+              fi
+              # Check if it worked
+              if command -v aws &> /dev/null; then
+                AWS_CLI_INSTALLED=true
+                echo "✅ AWS CLI installed via package manager: $(aws --version)"
+              fi
+            fi
+
+            # Final verification
+            if [ "$AWS_CLI_INSTALLED" = false ]; then
+              echo "❌ Failed to install AWS CLI using all available methods"
+              echo "   Attempted: pip, AWS CLI v2 installer, package manager"
+              exit 1
             fi
           fi
 
-          # Verify AWS CLI works
-          aws --version || {
-            echo "❌ AWS CLI verification failed"
-            echo "AWS CLI path: ${AWS_CLI_PATH}"
-            exit 1
-          }
-
-          echo "✅ AWS CLI verified at: $(which aws)"
+          # Check if jq is already installed
+          if command -v jq &> /dev/null; then
+            echo "jq is already installed: $(jq --version)"
+          else
+            echo "=== Installing jq ==="
+            if command -v /usr/bin/apt-get &> /dev/null; then
+              sudo /usr/bin/apt-get update && sudo /usr/bin/apt-get install -y jq || true
+            elif command -v /usr/bin/yum &> /dev/null; then
+              sudo /usr/bin/yum install -y jq || true
+            fi
+            # Verify installation
+            if command -v jq &> /dev/null; then
+              echo "✅ jq installed: $(jq --version)"
+            else
+              echo "⚠️  Warning: jq installation failed, but continuing..."
+            fi
+          fi
+        env:
+          HOME: ${{ github.workspace }}/.home
 
       - name: Run smoke test
         run: |
