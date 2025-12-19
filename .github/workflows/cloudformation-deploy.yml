@@ -101,6 +101,12 @@ jobs:
           aws-region: ${{ inputs.aws_region }}
           role-session-name: github-actions-cf-deploy
 
+      - name: Install AWS CLI
+        uses: EnglerAI/github-actions-templates/.github/actions/install-aws-cli@main
+
+      - name: Setup AWS Path
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-aws-path@main
+
       - name: Verify AWS Identity and Account
         run: |
           echo "=== AWS Identity Verification ==="

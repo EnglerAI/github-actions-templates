@@ -604,6 +604,14 @@ jobs:
           aws-region: us-east-2
           role-session-name: github-actions-python-test
 
+      - name: Install AWS CLI
+        if: inputs.upload_reports
+        uses: EnglerAI/github-actions-templates/.github/actions/install-aws-cli@main
+
+      - name: Setup AWS Path
+        if: inputs.upload_reports
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-aws-path@main
+
       - name: Upload test reports to S3
         if: inputs.upload_reports && always()
         run: |

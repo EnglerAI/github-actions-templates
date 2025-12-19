@@ -294,6 +294,14 @@ jobs:
           aws-region: us-east-2
           role-session-name: github-actions-security-scans
 
+      - name: Install AWS CLI
+        if: inputs.upload_reports
+        uses: EnglerAI/github-actions-templates/.github/actions/install-aws-cli@main
+
+      - name: Setup AWS Path
+        if: inputs.upload_reports
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-aws-path@main
+
       - name: Upload bandit report to S3
         if: inputs.upload_reports
         run: |
@@ -557,6 +565,14 @@ jobs:
           role-to-assume: ${{ secrets.aws_role_arn }}
           aws-region: us-east-2
           role-session-name: github-actions-security-scans
+
+      - name: Install AWS CLI
+        if: inputs.upload_reports
+        uses: EnglerAI/github-actions-templates/.github/actions/install-aws-cli@main
+
+      - name: Setup AWS Path
+        if: inputs.upload_reports
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-aws-path@main
 
       - name: Upload checkov report to S3
         if: inputs.upload_reports
@@ -822,6 +838,14 @@ jobs:
           role-to-assume: ${{ secrets.aws_role_arn }}
           aws-region: us-east-2
           role-session-name: github-actions-security-scans
+
+      - name: Install AWS CLI
+        if: inputs.upload_reports
+        uses: EnglerAI/github-actions-templates/.github/actions/install-aws-cli@main
+
+      - name: Setup AWS Path
+        if: inputs.upload_reports
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-aws-path@main
 
       - name: Upload radon reports to S3
         if: inputs.upload_reports
