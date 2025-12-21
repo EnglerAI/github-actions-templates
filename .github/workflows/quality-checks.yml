@@ -82,6 +82,17 @@ jobs:
         id: pip_env
         uses: EnglerAI/github-actions-templates/.github/actions/setup-pip-environment@main
 
+      - name: Cache pip packages
+        id: pip_cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.HOME }}/.cache/pip
+            ${{ env.HOME }}/venv
+          key: ${{ runner.os }}-pip-flake8-${{ hashFiles(format('{0}/**/requirements*.txt', inputs.working_directory)) }}
+          restore-keys: |
+            ${{ runner.os }}-pip-flake8-
+
       - name: Install dependencies
         working-directory: ${{ inputs.working_directory }}
         run: |
@@ -108,11 +119,19 @@ jobs:
           echo "PIP_FLAG: '${PIP_FLAG}'"
           echo "VIRTUAL_ENV: '${VIRTUAL_ENV}'"
 
-          # Upgrade pip in the environment
-          if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
-            ${PIP_CMD} install ${PIP_FLAG} --upgrade pip || true
+          # Upgrade pip only if it's older than 24.0 (released Jan 2024)
+          PIP_VERSION=$(${PIP_CMD} --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+          PIP_MAJOR=$(echo "$PIP_VERSION" | cut -d. -f1)
+          PIP_MINOR=$(echo "$PIP_VERSION" | cut -d. -f2)
+          if [ "$PIP_MAJOR" -lt 24 ] || ([ "$PIP_MAJOR" -eq 24 ] && [ "$PIP_MINOR" -lt 1 ]); then
+            echo "Upgrading pip (current: $PIP_VERSION)..."
+            if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
+              ${PIP_CMD} install ${PIP_FLAG} --upgrade pip || true
+            else
+              ${PIP_CMD} install --upgrade pip || true
+            fi
           else
-            ${PIP_CMD} install --upgrade pip || true
+            echo "✅ pip is recent enough ($PIP_VERSION), skipping upgrade"
           fi
 
           if [ -f "${{ inputs.requirements_file }}" ]; then
@@ -272,6 +291,17 @@ jobs:
         id: pip_env
         uses: EnglerAI/github-actions-templates/.github/actions/setup-pip-environment@main
 
+      - name: Cache pip packages
+        id: pip_cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.HOME }}/.cache/pip
+            ${{ env.HOME }}/venv
+          key: ${{ runner.os }}-pip-mypy-${{ hashFiles(format('{0}/**/requirements*.txt', inputs.working_directory)) }}
+          restore-keys: |
+            ${{ runner.os }}-pip-mypy-
+
       - name: Install dependencies
         run: |
           # Get pip command and flag from previous step
@@ -297,11 +327,19 @@ jobs:
           echo "PIP_FLAG: '${PIP_FLAG}'"
           echo "VIRTUAL_ENV: '${VIRTUAL_ENV}'"
 
-          # Upgrade pip in the environment
-          if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
-            ${PIP_CMD} install ${PIP_FLAG} --upgrade pip || true
+          # Upgrade pip only if it's older than 24.0 (released Jan 2024)
+          PIP_VERSION=$(${PIP_CMD} --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+          PIP_MAJOR=$(echo "$PIP_VERSION" | cut -d. -f1)
+          PIP_MINOR=$(echo "$PIP_VERSION" | cut -d. -f2)
+          if [ "$PIP_MAJOR" -lt 24 ] || ([ "$PIP_MAJOR" -eq 24 ] && [ "$PIP_MINOR" -lt 1 ]); then
+            echo "Upgrading pip (current: $PIP_VERSION)..."
+            if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
+              ${PIP_CMD} install ${PIP_FLAG} --upgrade pip || true
+            else
+              ${PIP_CMD} install --upgrade pip || true
+            fi
           else
-            ${PIP_CMD} install --upgrade pip || true
+            echo "✅ pip is recent enough ($PIP_VERSION), skipping upgrade"
           fi
 
           # Install project dependencies from requirements.txt first
@@ -494,6 +532,17 @@ jobs:
         id: pip_env
         uses: EnglerAI/github-actions-templates/.github/actions/setup-pip-environment@main
 
+      - name: Cache pip packages
+        id: pip_cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.HOME }}/.cache/pip
+            ${{ env.HOME }}/venv
+          key: ${{ runner.os }}-pip-cfn-lint-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-cfn-lint-
+
       - name: Install cfn-lint
         run: |
           # Get pip command and flag from previous step
@@ -519,20 +568,34 @@ jobs:
           echo "PIP_FLAG: '${PIP_FLAG}'"
           echo "VIRTUAL_ENV: '${VIRTUAL_ENV}'"
 
-          # Upgrade pip in the environment
-          if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
-            ${PIP_CMD} install ${PIP_FLAG} --upgrade pip || true
+          # Check if cfn-lint is already installed (from cache)
+          if command -v cfn-lint &> /dev/null && cfn-lint --version &> /dev/null; then
+            echo "✅ cfn-lint already installed (from cache)"
+            cfn-lint --version
           else
-            ${PIP_CMD} install --upgrade pip || true
-          fi
+            # Upgrade pip only if it's older than 24.0 (released Jan 2024)
+            PIP_VERSION=$(${PIP_CMD} --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+            PIP_MAJOR=$(echo "$PIP_VERSION" | cut -d. -f1)
+            PIP_MINOR=$(echo "$PIP_VERSION" | cut -d. -f2)
+            if [ "$PIP_MAJOR" -lt 24 ] || ([ "$PIP_MAJOR" -eq 24 ] && [ "$PIP_MINOR" -lt 1 ]); then
+              echo "Upgrading pip (current: $PIP_VERSION)..."
+              if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
+                ${PIP_CMD} install ${PIP_FLAG} --upgrade pip || true
+              else
+                ${PIP_CMD} install --upgrade pip || true
+              fi
+            else
+              echo "✅ pip is recent enough ($PIP_VERSION), skipping upgrade"
+            fi
 
-          echo "=== Installing cfn-lint ==="
-          if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
-            ${PIP_CMD} install ${PIP_FLAG} cfn-lint junit-xml
-          else
-            ${PIP_CMD} install cfn-lint junit-xml
+            echo "=== Installing cfn-lint ==="
+            if [ -n "${PIP_FLAG}" ] && [ "${PIP_FLAG}" != "" ]; then
+              ${PIP_CMD} install ${PIP_FLAG} cfn-lint junit-xml
+            else
+              ${PIP_CMD} install cfn-lint junit-xml
+            fi
+            cfn-lint --version
           fi
-          cfn-lint --version
 
       - name: Find CloudFormation templates
         id: find-templates
@@ -540,12 +603,13 @@ jobs:
         run: |
           echo "=== Finding CloudFormation/SAM Templates ==="
 
+          # Optimized find: exclude more directories and use more specific patterns
           # Find all template files from repository root
           # Look for files with "template", "cloudformation", or "sam" in the name
           # Also check for common CloudFormation/SAM file patterns
-          TEMPLATES=$(find . -type f \( -name "*.yml" -o -name "*.yaml" \) \
+          TEMPLATES=$(find . -maxdepth 5 -type f \( -name "*.yml" -o -name "*.yaml" \) \
             \( -iname "*template*" -o -iname "*cloudformation*" -o -iname "*sam*" -o -name "template.yml" -o -name "template.yaml" -o -name "sam.yml" -o -name "sam.yaml" \) \
-            ! -path "*/node_modules/*" ! -path "*/.git/*" ! -path "*/__pycache__/*" | sort || true)
+            ! -path "*/node_modules/*" ! -path "*/.git/*" ! -path "*/__pycache__/*" ! -path "*/.home/*" ! -path "*/venv/*" ! -path "*/.venv/*" ! -path "*/site-packages/*" | sort || true)
 
           if [ -z "${TEMPLATES}" ]; then
             echo "No CloudFormation templates found"
@@ -562,19 +626,19 @@ jobs:
         if: steps.find-templates.outputs.templates != ''
         # Lint from repo root since templates are at root
         run: |
-          echo "=== Linting CloudFormation Templates ==="
+          echo "=== Linting CloudFormation Templates (Parallel) ==="
 
-          # Read templates from output and generate JUnit XML reports
-          echo "${{ steps.find-templates.outputs.templates }}" | while read -r template; do
+          # Run linting in parallel (up to 4 concurrent jobs)
+          # Use xargs -P for parallel execution with inline script
+          echo "${{ steps.find-templates.outputs.templates }}" | xargs -n 1 -P 4 -I {} bash -c '
+            template="$1"
             if [ -n "${template}" ] && [ -f "${template}" ]; then
-              echo ""
               echo "Linting: ${template}"
-              # Generate JUnit XML report for each template
               TEMPLATE_BASENAME=$(basename "${template}" .yml)
               TEMPLATE_BASENAME=$(basename "${TEMPLATE_BASENAME}" .yaml)
               cfn-lint "${template}" --format junit --output-file "${TEMPLATE_BASENAME}-cfnlint.xml" || echo "⚠️  Issues found in ${template}"
             fi
-          done
+          ' _ {}
         continue-on-error: true
 
       - name: Combine cfn-lint reports

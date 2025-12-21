@@ -36,6 +36,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Cache Node.js
+        id: node_cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.HOME }}/nodejs
+          key: ${{ runner.os }}-nodejs-20.19.6
+          restore-keys: |
+            ${{ runner.os }}-nodejs-
+
       - name: Setup Node.js (for self-hosted runners)
         run: |
           # Ensure basic system PATH is available
@@ -46,13 +55,15 @@ jobs:
           NODE_DIR="$HOME/nodejs"
           /bin/mkdir -p "$NODE_DIR"
 
-          # Download and extract Node.js
+          # Download and extract Node.js only if not cached
           if [ ! -f "$NODE_DIR/bin/node" ]; then
             echo "Downloading Node.js ${NODE_VERSION}..."
             /usr/bin/curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" -o /tmp/node.tar.gz
             /bin/tar -xzf /tmp/node.tar.gz -C /tmp
             /bin/mv /tmp/node-v${NODE_VERSION}-linux-x64/* "$NODE_DIR/"
             /bin/rm -rf /tmp/node-v${NODE_VERSION}-linux-x64 /tmp/node.tar.gz
+          else
+            echo "✅ Using cached Node.js installation"
           fi
 
           # Ensure execute permissions on all binaries and scripts
@@ -74,15 +85,30 @@ jobs:
         env:
           HOME: ${{ github.workspace }}/.home
 
+      - name: Cache npm packages
+        id: npm_cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.HOME }}/.npm
+          key: ${{ runner.os }}-npm-markdownlint-cli
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
       - name: Install markdownlint
         run: |
           echo "=== Installing markdownlint ==="
 
-          # Install markdownlint-cli globally (matches GitLab CI)
-          npm install -g markdownlint-cli
+          # Check if markdownlint is already installed (from cache)
+          if command -v markdownlint &> /dev/null && markdownlint --version &> /dev/null; then
+            echo "✅ markdownlint already installed (from cache)"
+            markdownlint --version
+          else
+            # Install markdownlint-cli globally (matches GitLab CI)
+            npm install -g markdownlint-cli
 
-          # Verify installation
-          markdownlint --version
+            # Verify installation
+            markdownlint --version
+          fi
 
       - name: Verify README.md exists and is valid
         working-directory: ${{ inputs.working_directory }}

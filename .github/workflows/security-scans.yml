@@ -185,6 +185,17 @@ jobs:
         env:
           HOME: ${{ github.workspace }}/.home
 
+      - name: Cache pip packages
+        id: pip_cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.HOME }}/.cache/pip
+            ${{ env.HOME }}/venv
+          key: ${{ runner.os }}-pip-bandit-${{ hashFiles(format('{0}/**/requirements*.txt', inputs.working_directory)) }}
+          restore-keys: |
+            ${{ runner.os }}-pip-bandit-
+
       - name: Install dependencies
         working-directory: ${{ inputs.working_directory }}
         run: |
@@ -258,11 +269,23 @@ jobs:
             PIP_FLAG="--user"
           fi
 
-          # Upgrade pip in the environment
+          # Upgrade pip only if it's older than 24.0 (released Jan 2024)
           if [ "$PIP_CMD" = "pip" ]; then
-            pip install --upgrade pip || true
+            PIP_VERSION=$(pip --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
           else
-            $PIP_CMD install $PIP_FLAG --upgrade pip || true
+            PIP_VERSION=$($PIP_CMD --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+          fi
+          PIP_MAJOR=$(echo "$PIP_VERSION" | cut -d. -f1)
+          PIP_MINOR=$(echo "$PIP_VERSION" | cut -d. -f2)
+          if [ "$PIP_MAJOR" -lt 24 ] || ([ "$PIP_MAJOR" -eq 24 ] && [ "$PIP_MINOR" -lt 1 ]); then
+            echo "Upgrading pip (current: $PIP_VERSION)..."
+            if [ "$PIP_CMD" = "pip" ]; then
+              pip install --upgrade pip || true
+            else
+              $PIP_CMD install $PIP_FLAG --upgrade pip || true
+            fi
+          else
+            echo "✅ pip is recent enough ($PIP_VERSION), skipping upgrade"
           fi
 
           if [ -f "${{ inputs.requirements_file }}" ]; then
@@ -276,8 +299,8 @@ jobs:
             fi
           fi
 
-          # Install bandit (matches GitLab CI)
-          $PIP_CMD install $PIP_FLAG --no-cache-dir --upgrade awscli bandit
+          # Install bandit (matches GitLab CI) - removed --no-cache-dir since we're caching now
+          $PIP_CMD install $PIP_FLAG --upgrade awscli bandit
 
       - name: Run bandit security scan
         working-directory: ${{ inputs.working_directory }}
@@ -456,6 +479,17 @@ jobs:
         env:
           HOME: ${{ github.workspace }}/.home
 
+      - name: Cache pip packages
+        id: pip_cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.HOME }}/.cache/pip
+            ${{ env.HOME }}/venv
+          key: ${{ runner.os }}-pip-checkov
+          restore-keys: |
+            ${{ runner.os }}-pip-checkov-
+
       - name: Install checkov
         run: |
           echo "=== Installing checkov ==="
@@ -529,11 +563,23 @@ jobs:
             PIP_FLAG="--user"
           fi
 
-          # Upgrade pip in the environment
+          # Upgrade pip only if it's older than 24.0 (released Jan 2024)
           if [ "$PIP_CMD" = "pip" ]; then
-            pip install --upgrade pip || true
+            PIP_VERSION=$(pip --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
           else
-            $PIP_CMD install $PIP_FLAG --upgrade pip || true
+            PIP_VERSION=$($PIP_CMD --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+          fi
+          PIP_MAJOR=$(echo "$PIP_VERSION" | cut -d. -f1)
+          PIP_MINOR=$(echo "$PIP_VERSION" | cut -d. -f2)
+          if [ "$PIP_MAJOR" -lt 24 ] || ([ "$PIP_MAJOR" -eq 24 ] && [ "$PIP_MINOR" -lt 1 ]); then
+            echo "Upgrading pip (current: $PIP_VERSION)..."
+            if [ "$PIP_CMD" = "pip" ]; then
+              pip install --upgrade pip || true
+            else
+              $PIP_CMD install $PIP_FLAG --upgrade pip || true
+            fi
+          else
+            echo "✅ pip is recent enough ($PIP_VERSION), skipping upgrade"
           fi
 
           # Install checkov using pip (avoids GLIBC compatibility issues)
@@ -728,6 +774,17 @@ jobs:
         env:
           HOME: ${{ github.workspace }}/.home
 
+      - name: Cache pip packages
+        id: pip_cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.HOME }}/.cache/pip
+            ${{ env.HOME }}/venv
+          key: ${{ runner.os }}-pip-radon-${{ hashFiles(format('{0}/**/requirements*.txt', inputs.working_directory)) }}
+          restore-keys: |
+            ${{ runner.os }}-pip-radon-
+
       - name: Install dependencies
         working-directory: ${{ inputs.working_directory }}
         run: |
@@ -801,11 +858,23 @@ jobs:
             PIP_FLAG="--user"
           fi
 
-          # Upgrade pip in the environment
+          # Upgrade pip only if it's older than 24.0 (released Jan 2024)
           if [ "$PIP_CMD" = "pip" ]; then
-            pip install --upgrade pip || true
+            PIP_VERSION=$(pip --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
           else
-            $PIP_CMD install $PIP_FLAG --upgrade pip || true
+            PIP_VERSION=$($PIP_CMD --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+          fi
+          PIP_MAJOR=$(echo "$PIP_VERSION" | cut -d. -f1)
+          PIP_MINOR=$(echo "$PIP_VERSION" | cut -d. -f2)
+          if [ "$PIP_MAJOR" -lt 24 ] || ([ "$PIP_MAJOR" -eq 24 ] && [ "$PIP_MINOR" -lt 1 ]); then
+            echo "Upgrading pip (current: $PIP_VERSION)..."
+            if [ "$PIP_CMD" = "pip" ]; then
+              pip install --upgrade pip || true
+            else
+              $PIP_CMD install $PIP_FLAG --upgrade pip || true
+            fi
+          else
+            echo "✅ pip is recent enough ($PIP_VERSION), skipping upgrade"
           fi
 
           if [ -f "${{ inputs.requirements_file }}" ]; then
@@ -819,8 +888,8 @@ jobs:
             fi
           fi
 
-          # Install radon and awscli (matches GitLab CI)
-          $PIP_CMD install $PIP_FLAG --no-cache-dir --upgrade awscli radon
+          # Install radon and awscli (matches GitLab CI) - removed --no-cache-dir since we're caching now
+          $PIP_CMD install $PIP_FLAG --upgrade awscli radon
 
       - name: Run radon complexity analysis
         working-directory: ${{ inputs.working_directory }}
