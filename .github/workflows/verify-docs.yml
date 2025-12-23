@@ -36,77 +36,46 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Cache Node.js
-        id: node_cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.HOME }}/nodejs
-          key: ${{ runner.os }}-nodejs-20.19.6
-          restore-keys: |
-            ${{ runner.os }}-nodejs-
-
-      - name: Setup Node.js (for self-hosted runners)
+      - name: Verify Node.js (pre-installed in runner image)
         run: |
-          # Ensure basic system PATH is available
-          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
-
-          # Install Node.js in a writable location
-          NODE_VERSION="20.19.6"
-          NODE_DIR="$HOME/nodejs"
-          /bin/mkdir -p "$NODE_DIR"
-
-          # Download and extract Node.js only if not cached
-          if [ ! -f "$NODE_DIR/bin/node" ]; then
-            echo "Downloading Node.js ${NODE_VERSION}..."
-            /usr/bin/curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" -o /tmp/node.tar.gz
-            /bin/tar -xzf /tmp/node.tar.gz -C /tmp
-            /bin/mv /tmp/node-v${NODE_VERSION}-linux-x64/* "$NODE_DIR/"
-            /bin/rm -rf /tmp/node-v${NODE_VERSION}-linux-x64 /tmp/node.tar.gz
+          # Node.js 20.19.6 is pre-installed in the runner image at /opt/nodejs
+          # Just verify it exists and add to PATH
+          NODE_DIR="/opt/nodejs"
+          
+          if [ -f "$NODE_DIR/bin/node" ]; then
+            echo "✅ Using pre-installed Node.js from runner image"
+            echo "$NODE_DIR/bin" >> $GITHUB_PATH
+            export PATH="$NODE_DIR/bin:$PATH"
+            
+            echo "Node.js version:"
+            node --version
+            echo "npm version:"
+            npm --version
           else
-            echo "✅ Using cached Node.js installation"
+            echo "⚠️  Warning: Pre-installed Node.js not found at $NODE_DIR/bin/node"
+            echo "Falling back to system Node.js if available..."
+            if command -v node &> /dev/null; then
+              node --version
+              npm --version
+            else
+              echo "❌ ERROR: Node.js not found. Please check runner image configuration."
+              exit 1
+            fi
           fi
 
-          # Ensure execute permissions on all binaries and scripts
-          /usr/bin/find "$NODE_DIR/bin" -type f -exec /bin/chmod +x {} \; 2>/dev/null || true
-          /bin/chmod +x "$NODE_DIR/bin/node" "$NODE_DIR/bin/npm" "$NODE_DIR/bin/npx" 2>/dev/null || true
-
-          # Add to PATH for subsequent steps
-          echo "$NODE_DIR/bin" >> $GITHUB_PATH
-
-          # Export PATH for current step so npm can find node
-          export PATH="$NODE_DIR/bin:$PATH"
-
-          # Verify installation
-          echo "Node.js version:"
-          "$NODE_DIR/bin/node" --version
-          echo "npm version:"
-          # npm's shebang needs node in PATH
-          "$NODE_DIR/bin/npm" --version
-        env:
-          HOME: ${{ github.workspace }}/.home
-
-      - name: Cache npm packages
-        id: npm_cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.HOME }}/.npm
-          key: ${{ runner.os }}-npm-markdownlint-cli
-          restore-keys: |
-            ${{ runner.os }}-npm-
-
-      - name: Install markdownlint
+      - name: Verify markdownlint (pre-installed in runner image)
         run: |
-          echo "=== Installing markdownlint ==="
-
-          # Check if markdownlint is already installed (from cache)
+          # markdownlint-cli is pre-installed globally in the runner image
           if command -v markdownlint &> /dev/null && markdownlint --version &> /dev/null; then
-            echo "✅ markdownlint already installed (from cache)"
+            echo "✅ Using pre-installed markdownlint from runner image"
             markdownlint --version
           else
-            # Install markdownlint-cli globally (matches GitLab CI)
-            npm install -g markdownlint-cli
-
-            # Verify installation
+            echo "⚠️  Warning: Pre-installed markdownlint not found"
+            echo "Attempting to install markdownlint-cli..."
+            npm install -g markdownlint-cli || {
+              echo "❌ ERROR: Failed to install markdownlint. Please check runner image configuration."
+              exit 1
+            }
             markdownlint --version
           fi
 

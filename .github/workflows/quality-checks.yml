@@ -120,6 +120,7 @@ jobs:
           echo "VIRTUAL_ENV: '${VIRTUAL_ENV}'"
 
           # Upgrade pip only if it's older than 24.0 (released Jan 2024)
+          # Note: On custom runner image, pip is already upgraded, so this check will always skip quickly
           PIP_VERSION=$(${PIP_CMD} --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
           PIP_MAJOR=$(echo "$PIP_VERSION" | cut -d. -f1)
           PIP_MINOR=$(echo "$PIP_VERSION" | cut -d. -f2)
@@ -328,6 +329,7 @@ jobs:
           echo "VIRTUAL_ENV: '${VIRTUAL_ENV}'"
 
           # Upgrade pip only if it's older than 24.0 (released Jan 2024)
+          # Note: On custom runner image, pip is already upgraded, so this check will always skip quickly
           PIP_VERSION=$(${PIP_CMD} --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
           PIP_MAJOR=$(echo "$PIP_VERSION" | cut -d. -f1)
           PIP_MINOR=$(echo "$PIP_VERSION" | cut -d. -f2)
@@ -574,6 +576,7 @@ jobs:
             cfn-lint --version
           else
             # Upgrade pip only if it's older than 24.0 (released Jan 2024)
+            # Note: On custom runner image, pip is already upgraded, so this check will always skip quickly
             PIP_VERSION=$(${PIP_CMD} --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
             PIP_MAJOR=$(echo "$PIP_VERSION" | cut -d. -f1)
             PIP_MINOR=$(echo "$PIP_VERSION" | cut -d. -f2)

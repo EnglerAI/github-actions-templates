@@ -270,6 +270,7 @@ jobs:
           fi
 
           # Upgrade pip only if it's older than 24.0 (released Jan 2024)
+          # Note: On custom runner image, pip is already upgraded, so this check will always skip quickly
           if [ "$PIP_CMD" = "pip" ]; then
             PIP_VERSION=$(pip --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
           else
@@ -564,6 +565,7 @@ jobs:
           fi
 
           # Upgrade pip only if it's older than 24.0 (released Jan 2024)
+          # Note: On custom runner image, pip is already upgraded, so this check will always skip quickly
           if [ "$PIP_CMD" = "pip" ]; then
             PIP_VERSION=$(pip --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
           else
@@ -859,6 +861,7 @@ jobs:
           fi
 
           # Upgrade pip only if it's older than 24.0 (released Jan 2024)
+          # Note: On custom runner image, pip is already upgraded, so this check will always skip quickly
           if [ "$PIP_CMD" = "pip" ]; then
             PIP_VERSION=$(pip --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
           else
