@@ -175,10 +175,7 @@ jobs:
           echo "✅ S3 permission tests completed"
 
       - name: Install SAM CLI
-        run: |
-          echo "=== Installing SAM CLI ==="
-          pip install aws-sam-cli
-          sam --version
+        uses: EnglerAI/github-actions-templates/.github/actions/install-sam-cli@main
 
       - name: Deploy with SAM
         id: deploy
