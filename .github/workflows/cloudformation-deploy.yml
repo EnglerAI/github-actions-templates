@@ -78,6 +78,8 @@ jobs:
     permissions:
       id-token: write # Required for OIDC
       contents: read
+    env:
+      HOME: ${{ github.workspace }}/.home
 
     steps:
       - name: Debug - Check job context
@@ -90,6 +92,9 @@ jobs:
           echo "GitHub Event: ${{ github.event_name }}"
           echo "GitHub Ref: ${{ github.ref }}"
           echo "Run ID: ${{ github.run_id }}"
+
+      - name: Setup Git
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-git-self-hosted@main
 
       - name: Checkout code
         uses: actions/checkout@v4

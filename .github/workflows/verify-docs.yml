@@ -23,15 +23,8 @@ jobs:
       HOME: ${{ github.workspace }}/.home
       NODE_DIR: ${{ github.workspace }}/.home/nodejs
     steps:
-      - name: Configure Git (for self-hosted runners)
-        run: |
-          # Create writable HOME directory
-          mkdir -p "$HOME"
-          # Configure git with the new HOME
-          git config --global --add safe.directory '*' || true
-          git config --global user.name "GitHub Actions" || true
-          git config --global user.email "actions@github.com" || true
-        continue-on-error: true
+      - name: Setup Git
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-git-self-hosted@main
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -41,12 +34,12 @@ jobs:
           # Node.js 20.19.6 is pre-installed in the runner image at /opt/nodejs
           # Just verify it exists and add to PATH
           NODE_DIR="/opt/nodejs"
-          
+
           if [ -f "$NODE_DIR/bin/node" ]; then
             echo "✅ Using pre-installed Node.js from runner image"
             echo "$NODE_DIR/bin" >> $GITHUB_PATH
             export PATH="$NODE_DIR/bin:$PATH"
-            
+
             echo "Node.js version:"
             node --version
             echo "npm version:"
