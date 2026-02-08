@@ -77,6 +77,9 @@ on:
       subnet_ids_prd:
         description: "Optional comma-delimited Subnet IDs for Lambda VPC configuration (PRD)"
         required: false
+      cognito_user_pool_id:
+        description: "Cognito User Pool ID for API Gateway authorizer (env-specific)"
+        required: false
       gitlab_api_token:
         description: "GitLab API token for private packages"
         required: false
@@ -423,7 +426,13 @@ jobs:
           fi
 
           # Build parameter overrides
-          PARAM_OVERRIDES="ARTIFACTSBUCKET=${{ env.s3_bucket }} S3Key=${{ env.s3_key }} ACCOUNTID=${{ secrets.aws_account_id }} NAME=${{ inputs.function_name }}"
+          PARAM_OVERRIDES="ARTIFACTSBUCKET=${{ env.s3_bucket }} S3Key=${{ env.s3_key }} ACCOUNTID=${{ secrets.aws_account_id }} NAME=${{ inputs.function_name }} Environment=${{ inputs.environment }}"
+
+          # Add Cognito User Pool ID when provided (required if template has no default)
+          if [ -n "${{ secrets.cognito_user_pool_id }}" ]; then
+            PARAM_OVERRIDES="${PARAM_OVERRIDES} CognitoUserPoolId=${{ secrets.cognito_user_pool_id }}"
+            echo "Cognito User Pool ID provided for API Gateway authorizer"
+          fi
 
           # Select VPC configuration based on environment
           ENV="${{ inputs.environment }}"
