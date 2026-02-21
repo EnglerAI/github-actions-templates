@@ -313,7 +313,7 @@ jobs:
         run: |
           echo "=== Running Bandit Security Scan ==="
           # Matches GitLab: -r . -x /tests -f xml -o bandit.xml --exit-zero; exclude venv
-          bandit -r . -x tests,.home -f xml -o bandit.xml --exit-zero || exit 1
+          bandit -r . -x tests,tests/,.home,.home/venv,venv -f xml -o bandit.xml --exit-zero || exit 1
 
       - name: Configure AWS for S3 upload
         if: inputs.upload_reports
