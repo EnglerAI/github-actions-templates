@@ -312,8 +312,8 @@ jobs:
         working-directory: ${{ inputs.working_directory }}
         run: |
           echo "=== Running Bandit Security Scan ==="
-          # Matches GitLab: -r . -x /tests -f xml -o bandit.xml --exit-zero
-          bandit -r . -x /tests -f xml -o bandit.xml --exit-zero || exit 1
+          # Matches GitLab: -r . -x /tests -f xml -o bandit.xml --exit-zero; exclude venv
+          bandit -r . -x /tests,.home/venv -f xml -o bandit.xml --exit-zero || exit 1
 
       - name: Configure AWS for S3 upload
         if: inputs.upload_reports
