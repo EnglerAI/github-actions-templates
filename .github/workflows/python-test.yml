@@ -32,6 +32,11 @@ on:
         description: "CloudBot Account ID for S3 uploads (overrides secret)"
         required: false
         type: string
+      reports_bucket:
+        description: "S3 bucket for reports (cloudbot-reporting-dev, cloudbot-reporting-prod)"
+        required: false
+        type: string
+        default: "cloudbot-reporting-dev"
       runner:
         description: "Runner label (default: self-hosted)"
         required: false
@@ -672,7 +677,7 @@ jobs:
             echo "⚠️  Warning: ACCOUNTID not provided, cannot upload to S3"
             exit 0
           fi
-          REPORTS_BUCKET="cloudbot-reporting-v2"
+          REPORTS_BUCKET="${{ inputs.reports_bucket }}"
 
           if [ -f "${{ inputs.working_directory }}/pytest-report.xml" ]; then
             echo "Uploading pytest-report.xml to S3..."

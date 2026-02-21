@@ -23,6 +23,10 @@ inputs:
     description: "KMS key alias for encryption"
     required: false
     default: "alias/CloudBotPipelineKey"
+  reports_bucket:
+    description: "S3 bucket for reports (env-aware: cloudbot-reporting-dev, cloudbot-reporting-prod)"
+    required: false
+    default: "cloudbot-reporting-dev"
 
 outputs:
   report_url:
@@ -69,7 +73,7 @@ runs:
         FILE_EXT="${REPORT_FILE##*.}"
 
         # S3 bucket and key (preserve original file extension)
-        REPORTS_BUCKET="cloudbot-reporting-v2"
+        REPORTS_BUCKET="${{ inputs.reports_bucket }}"
         REPORT_KEY="incoming/${ACCOUNT_ID}/${PROJECT_NAME}/${DATETIME}-${{ inputs.report_type }}.${FILE_EXT}"
 
         echo "Report File: ${{ inputs.report_file }}"
@@ -86,7 +90,7 @@ runs:
           exit 0
         fi
 
-        # Upload to S3 (uses bucket default encryption: AES256 for cloudbot-reporting-v2)
+        # Upload to S3 (uses bucket default encryption: AES256)
         if aws s3 cp "${{ inputs.report_file }}" "s3://${REPORTS_BUCKET}/${REPORT_KEY}" \
           --region ${AWS_REGION} 2>&1; then
           echo "✅ Report uploaded successfully"
