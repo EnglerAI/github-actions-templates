@@ -54,6 +54,9 @@ on:
       accountid:
         description: "CloudBot Account ID for S3 upload paths"
         required: false
+      testing_fail_builds:
+        description: "If '1', fail build on pytest failure; if '0' or unset, do not fail"
+        required: false
 
 jobs:
   lint:
@@ -565,6 +568,8 @@ jobs:
 
       - name: Run tests with pytest
         working-directory: ${{ inputs.working_directory }}
+        env:
+          TESTING_FAIL_BUILDS: ${{ secrets.testing_fail_builds }}
         run: |
           # Check for test files in tests/ directory
           HAS_TESTS_DIR=false
@@ -602,6 +607,12 @@ jobs:
             echo "    tests/*" >> .coveragerc
             echo "    */tests/*" >> .coveragerc
             
+            # Add --suppress-tests-failed-exit-code unless TESTING_FAIL_BUILDS=1 (fail build on test failure)
+            PYTEST_EXTRA_ARGS=""
+            if [ "${TESTING_FAIL_BUILDS}" != "1" ]; then
+              PYTEST_EXTRA_ARGS="--suppress-tests-failed-exit-code"
+            fi
+            
             echo "Running pytest on: $PYTEST_TARGET"
             pytest $PYTEST_TARGET -v \
               --cov=. \
@@ -610,9 +621,9 @@ jobs:
               --cov-report=xml \
               --cov-report=html \
               --junitxml=pytest-report.xml \
-              --suppress-tests-failed-exit-code
+              $PYTEST_EXTRA_ARGS
             
-            # Store exit code but don't fail yet
+            # Store exit code (only reached when --suppress-tests-failed-exit-code was used)
             PYTEST_EXIT=$?
             
             echo "pytest_exit_code=${PYTEST_EXIT}" >> $GITHUB_ENV
