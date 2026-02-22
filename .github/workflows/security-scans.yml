@@ -51,6 +51,11 @@ on:
         description: "Runner label (default: self-hosted)"
         required: false
         type: string
+      use_pip_cache:
+        description: "Use actions/cache for pip (set false on self-hosted to avoid post-job cleanup EACCES/hangs)"
+        required: false
+        type: boolean
+        default: true
     secrets:
       gitlab_api_token:
         description: "GitLab API token for private packages"
@@ -191,6 +196,7 @@ jobs:
           HOME: ${{ github.workspace }}/.home
 
       - name: Cache pip packages
+        if: inputs.use_pip_cache
         id: pip_cache
         uses: actions/cache@v4
         with:
@@ -487,6 +493,7 @@ jobs:
           HOME: ${{ github.workspace }}/.home
 
       - name: Cache pip packages
+        if: inputs.use_pip_cache
         id: pip_cache
         uses: actions/cache@v4
         with:
@@ -783,6 +790,7 @@ jobs:
           HOME: ${{ github.workspace }}/.home
 
       - name: Cache pip packages
+        if: inputs.use_pip_cache
         id: pip_cache
         uses: actions/cache@v4
         with:
