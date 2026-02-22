@@ -41,6 +41,11 @@ on:
         description: "Runner label (default: self-hosted)"
         required: false
         type: string
+      test_pythonpath:
+        description: "PYTHONPATH for test step (e.g. 'python' for Lambda layers with root-level tests/)"
+        required: false
+        type: string
+        default: ""
     secrets:
       gitlab_api_token:
         description: "GitLab API token for private packages"
@@ -570,6 +575,7 @@ jobs:
         working-directory: ${{ inputs.working_directory }}
         env:
           TESTING_FAIL_BUILDS: ${{ secrets.testing_fail_builds }}
+          PYTHONPATH: ${{ inputs.test_pythonpath }}
         run: |
           # Check for test files in tests/ directory
           HAS_TESTS_DIR=false
