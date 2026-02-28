@@ -123,7 +123,7 @@ Add these secrets to your repository (Settings → Secrets and variables → Act
 
 **Required:**
 - `AWS_ROLE_ARN_DEV` - IAM role ARN for dev environment
-- `AWS_ROLE_ARN_QAT` - IAM role ARN for QAT environment  
+- `AWS_ROLE_ARN_QAT` - IAM role ARN for QAT environment
 - `AWS_ROLE_ARN_STG` - IAM role ARN for staging environment
 - `AWS_ROLE_ARN_PRD` - IAM role ARN for production environment
 - `AWS_ACCOUNT_ID` - AWS account ID
@@ -331,4 +331,3 @@ If you encounter issues:
    - Track deployment metrics
    - Set up alerting
    - Optimize workflow runs
-

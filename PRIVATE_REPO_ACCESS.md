@@ -128,7 +128,7 @@ Organization-wide settings make this much easier:
 curl -s https://api.github.com/repos/bengler9/github-actions-templates/contents/.github/workflows/python-test.yml | jq .name
 ```
 
-Expected: `"python-test.yml"`  
+Expected: `"python-test.yml"`
 If 404: Repository is still private and/or not accessible
 
 ### Re-trigger Workflow
@@ -157,4 +157,3 @@ git push origin feature/test2
 4. Done ✅
 
 Choose based on your security requirements!
-

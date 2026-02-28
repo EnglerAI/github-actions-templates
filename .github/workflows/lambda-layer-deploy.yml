@@ -159,7 +159,7 @@ jobs:
   deploy:
     needs: [package]
     if: |
-      always() && 
+      always() &&
       (needs.package.result == 'success')
     runs-on: ${{ inputs.runner || 'self-hosted' }}
     env:
@@ -376,10 +376,3 @@ jobs:
             --output table
 
           echo "✅ Layer deployment verified"
-
-
-
-
-
-
-

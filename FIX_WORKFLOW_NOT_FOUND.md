@@ -128,4 +128,3 @@ The templates were committed locally but **not pushed to GitHub**.
 **Solution**: Run Step 1 above to push them.
 
 Once pushed, the `github-e2-lambda` workflow will be able to reference them!
-

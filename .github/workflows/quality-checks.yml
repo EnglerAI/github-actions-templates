@@ -686,18 +686,18 @@ jobs:
               try:
                   tree = ET.parse(xml_file)
                   test_suite = tree.getroot()
-                  
+
                   # Extract counts
                   tests = int(test_suite.get('tests', 0))
                   failures = int(test_suite.get('failures', 0))
                   errors = int(test_suite.get('errors', 0))
                   time = float(test_suite.get('time', 0.0))
-                  
+
                   total_tests += tests
                   total_failures += failures
                   total_errors += errors
                   total_time += time
-                  
+
                   # Create a wrapper testsuite for this template
                   template_suite = ET.SubElement(root_suite, 'testsuite')
                   template_name = xml_file.replace('-cfnlint.xml', '')
@@ -706,11 +706,11 @@ jobs:
                   template_suite.set('failures', str(failures))
                   template_suite.set('errors', str(errors))
                   template_suite.set('time', str(time))
-                  
+
                   # Add all elements from the original testsuite
                   for child in test_suite:
                       template_suite.append(child)
-              
+
               except Exception as e:
                   print(f'Error processing {xml_file}: {e}')
 

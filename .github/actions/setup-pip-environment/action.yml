@@ -89,7 +89,7 @@ runs:
           echo "pip_flag=--user" >> $GITHUB_OUTPUT
           echo "✅ Set pip_cmd=$PYTHON_CMD -m pip, pip_flag=--user"
         fi
-        
+
         # Verify outputs were set
         echo "=== Verifying outputs ==="
         if [ -f "$VENV_DIR/bin/activate" ] && [ -f "$VENV_DIR/bin/pip" ]; then
@@ -99,4 +99,3 @@ runs:
         fi
       env:
         HOME: ${{ github.workspace }}/.home
-

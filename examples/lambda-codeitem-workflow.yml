@@ -221,3 +221,16 @@ jobs:
     secrets:
       aws_role_arn: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_PRD }}
       aws_account_id: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ACCOUNT_ID_DEV || secrets.AWS_ACCOUNT_ID_PRD }}
+
+  # Step 8: Reset env/dev from main (after production deploy)
+  # Runs only on push to main after deploy succeeds. Deletes env/dev and recreates from main.
+  reset-env-branches:
+    needs: [deploy]
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      needs.deploy.result == 'success'
+    permissions:
+      contents: write
+    uses: EnglerAI/github-actions-templates/.github/workflows/reset-env-branches.yml@main

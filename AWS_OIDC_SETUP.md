@@ -122,7 +122,7 @@ data "aws_caller_identity" "current" {}
 
 resource "aws_iam_role" "github_actions_lambda_deploy" {
   name = "github-actions-lambda-deploy-${var.environment}"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -336,15 +336,15 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::ACCOUNT_ID:role/github-actions-lambda-deploy-dev
           aws-region: us-east-2
-      
+
       - name: Verify AWS Identity
         run: |
           echo "=== AWS Identity ==="
           aws sts get-caller-identity
-          
+
           echo "=== Test S3 Access ==="
           aws s3 ls
-          
+
           echo "=== Test Lambda Access ==="
           aws lambda list-functions --max-items 5
 ```
@@ -411,7 +411,7 @@ For organizations with multiple AWS accounts:
 # In each AWS account (dev, qat, stg, prd)
 module "github_oidc" {
   source = "./modules/github-oidc"
-  
+
   github_org   = "your-org"
   repositories = [
     "repo1",
@@ -448,4 +448,3 @@ module "github_oidc" {
 6. **Document Roles**: Maintain role inventory
 7. **Test Changes**: Validate in dev first
 8. **Use Conditions**: Restrict by branch/environment where possible
-

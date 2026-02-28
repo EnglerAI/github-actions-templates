@@ -10,7 +10,7 @@ git add .
 git commit -m "Phase 1.5: Enhanced templates with full GitLab CI parity
 
 - Added quality-checks.yml (flake8, mypy, cfn-lint)
-- Added security-scans.yml (bandit, checkov, radon)  
+- Added security-scans.yml (bandit, checkov, radon)
 - Added code-analyzer.yml (git archive → S3)
 - Added verify-docs.yml (markdownlint)
 - Enhanced lambda-deploy.yml (pilot learnings applied)
@@ -56,7 +56,7 @@ Watch for:
 aws s3 ls s3://cloudbot-reporting-v2/incoming/851725243339/github-e2-lambda/ \
   --profile app002-dev --region us-east-2 --recursive | tail -20
 
-# Artifacts bucket  
+# Artifacts bucket
 aws s3 ls s3://cloudbot-codepipeline-artifacts-us-east-2-851725243339/codeitems/ \
   --profile app002-dev --region us-east-2 --recursive | grep github-e2-lambda
 ```
@@ -183,7 +183,7 @@ git push origin env/dev
    - Enhanced Lambda deployment
    - S3 report uploads
    - Full feature parity with GitLab CI"
-   
+
    git push origin v1.0.0
    ```
 
@@ -211,4 +211,3 @@ git push origin env/dev
 ---
 
 **Ready to proceed!** Follow steps above to test Phase 1.5 enhancements. 🚀
-

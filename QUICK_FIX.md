@@ -74,4 +74,3 @@ git push origin feature/test2
 The workflow should now find the templates and execute successfully.
 
 **Expected**: 8 jobs execute, all green ✅
-

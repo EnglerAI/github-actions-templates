@@ -349,7 +349,7 @@ jobs:
             --sse aws:kms \
             --sse-kms-key-id ${{ inputs.kms_key_alias }} 2>&1; then
             echo "✅ PutObject succeeded"
-            
+
             # Clean up test file
             echo ""
             echo "4. Testing DeleteObject..."
@@ -509,7 +509,7 @@ jobs:
   smoke-test:
     needs: [deploy]
     if: |
-      always() && 
+      always() &&
       (needs.deploy.result == 'success')
     runs-on: ${{ inputs.runner || 'self-hosted' }}
     env:

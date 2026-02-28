@@ -1,0 +1,8 @@
+# Relax line-length for workflow and example YAML (references, URLs, long keys).
+# Other workflows in this repo have lines up to ~200 chars.
+extends: default
+rules:
+  line-length:
+    max: 120
+  document-start: disable
+  truthy: disable  # GitHub Actions uses keys like workflow_call: with no value

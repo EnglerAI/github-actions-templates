@@ -79,4 +79,3 @@ jobs:
       auto_apply: false  # Use GitHub environment protection for manual approval
     secrets:
       aws_role_arn: ${{ needs.setup.outputs.aws_role }}
-

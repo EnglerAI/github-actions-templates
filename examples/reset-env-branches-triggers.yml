@@ -1,0 +1,25 @@
+# Example: Optional manual and scheduled triggers for env branch reset
+#
+# Copy this file to your codeitem repository as .github/workflows/reset-env-branches-triggers.yml
+# to enable:
+# - Manual run from Actions tab (workflow_dispatch)
+# - Weekly scheduled reset (e.g. Monday 08:00 UTC) as a safety net
+#
+# The reusable workflow runs in your repo context and only resets when ref is main.
+# Scheduled runs use the default branch (main), so the reset will proceed.
+
+name: Reset env branches (manual / scheduled)
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly Monday 08:00 UTC
+    - cron: "0 8 * * 1"
+
+permissions:
+  contents: write
+
+jobs:
+  reset-env-branches:
+    runs-on: ubuntu-latest
+    uses: EnglerAI/github-actions-templates/.github/workflows/reset-env-branches.yml@main

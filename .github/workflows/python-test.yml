@@ -598,7 +598,7 @@ jobs:
 
           if [ "$HAS_TESTS_DIR" = true ] || [ "$HAS_CURRENT_DIR_TESTS" = true ]; then
             echo "Running pytest with coverage..."
-            
+
             # Determine pytest target based on where tests are found
             if [ "$HAS_TESTS_DIR" = true ] && [ "$HAS_CURRENT_DIR_TESTS" = true ]; then
               # Both locations have tests - run pytest on current directory (will find both)
@@ -610,7 +610,7 @@ jobs:
               # Only current directory has tests
               PYTEST_TARGET="."
             fi
-            
+
             # Create .coveragerc to exclude test files from coverage
             # Since we're in the working directory, create it here
             echo "[run]" > .coveragerc
@@ -619,13 +619,13 @@ jobs:
             echo "    */test_*.py" >> .coveragerc
             echo "    tests/*" >> .coveragerc
             echo "    */tests/*" >> .coveragerc
-            
+
             # Add --suppress-tests-failed-exit-code unless TESTING_FAIL_BUILDS=1 (fail build on test failure)
             PYTEST_EXTRA_ARGS=""
             if [ "${TESTING_FAIL_BUILDS}" != "1" ]; then
               PYTEST_EXTRA_ARGS="--suppress-tests-failed-exit-code"
             fi
-            
+
             echo "Running pytest on: $PYTEST_TARGET"
             pytest $PYTEST_TARGET -v \
               --cov=. \
@@ -635,10 +635,10 @@ jobs:
               --cov-report=html \
               --junitxml=pytest-report.xml \
               $PYTEST_EXTRA_ARGS
-            
+
             # Store exit code (only reached when --suppress-tests-failed-exit-code was used)
             PYTEST_EXIT=$?
-            
+
             echo "pytest_exit_code=${PYTEST_EXIT}" >> $GITHUB_ENV
           else
             echo "No tests directory found or no test files, skipping tests"
@@ -658,10 +658,10 @@ jobs:
             line_rate = float(root.get('line-rate', 0))
             print(f'{line_rate * 100:.2f}')
             " || echo "0")
-            
+
             echo "Coverage: ${COVERAGE}%"
             echo "Threshold: ${{ inputs.coverage_threshold }}%"
-            
+
             # Compare coverage to threshold
             if (( $(echo "${COVERAGE} < ${{ inputs.coverage_threshold }}" | bc -l) )); then
               echo "❌ Coverage ${COVERAGE}% is below threshold ${{ inputs.coverage_threshold }}%"
@@ -795,10 +795,10 @@ jobs:
                   return false;
                 }
               }
-              
+
               const reportPath = path.join(workingDir, 'pytest-report.xml');
               console.log(`Looking for pytest report at: ${reportPath}`);
-              
+
               // Check if file exists in working directory
               if (fs.existsSync(reportPath)) {
                 const pytestXml = fs.readFileSync(reportPath, 'utf8');

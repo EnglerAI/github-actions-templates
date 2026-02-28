@@ -13,6 +13,7 @@ github-actions-templates/
 │   ├── quality-checks.yml       # Code quality (flake8, mypy, cfn-lint)
 │   ├── security-scans.yml       # Security scanning (bandit, checkov, radon)
 │   ├── code-analyzer.yml        # Code analysis (git archive → S3)
+│   ├── reset-env-branches.yml   # Reset env/dev from main (post-merge)
 │   └── verify-docs.yml          # Documentation verification
 ├── actions/                     # Composite actions
 │   ├── setup-aws/               # AWS authentication setup
@@ -20,6 +21,8 @@ github-actions-templates/
 │   └── upload-s3-report/        # S3 report uploads
 ├── examples/                    # Example workflows
 │   ├── lambda-codeitem-workflow.yml  # Complete Lambda pipeline
+│   ├── lambda-layer-codeitem-workflow.yml  # Lambda layer pipeline
+│   ├── reset-env-branches-triggers.yml    # Optional manual/scheduled reset
 │   └── terraform-codeitem-workflow.yml
 └── README.md
 ```
@@ -94,6 +97,23 @@ Deploy Lambda functions with SAM, S3 uploads, and smoke testing. Enhanced with p
 - ✅ SAM deployment with proper parameters
 - ✅ Smoke testing with function invocation
 - ✅ Stack name and function name outputs
+
+### Reset env branches (`reset-env-branches.yml`)
+
+Reset `env/dev` from `main` after production deploy (aligned with GitLab `.default-reset_env_branches`). Call from codeitem deploy workflows only; no direct trigger (workflow_call only).
+
+**When to use:** Add a job that calls this workflow after your deploy job, so that on push to `main` (after deploy succeeds), `env/dev` is deleted and recreated from `main`. Keeps the dev branch in sync with production.
+
+**Inputs:** None (resets `env/dev` only).
+
+**Features:**
+
+- ✅ Runs only when caller ref is `main` (skips otherwise)
+- ✅ Compares `env/dev` and `main` by commit SHA; resets only if diverged
+- ✅ Delete remote `env/dev` then create from `origin/main` via git push
+- ✅ Uses `GITHUB_TOKEN` with `contents: write` (no extra secrets)
+
+See [Environment branch reset](#-environment-branch-reset) below and the `reset-env-branches` job in `examples/lambda-codeitem-workflow.yml`. For optional manual or weekly scheduled reset, copy `examples/reset-env-branches-triggers.yml` into your repo.
 
 ### Quality Checks (`quality-checks.yml`)
 
@@ -289,6 +309,17 @@ Branch-based environment routing (matches GitLab CI pattern):
 
 The `determine-environment` action automatically routes based on branch.
 
+## 🌿 Environment branch reset
+
+After merging to `main` and deploying to production, you can automatically reset `env/dev` so it matches `main` (delete `env/dev` and recreate it from `main`). This matches the GitLab CI behavior (`.default-reset_env_branches`).
+
+**How to enable:**
+
+1. **Post-merge (primary):** Add a `reset-env-branches` job to your codeitem deploy workflow that runs after the deploy job, only on push to `main` when deploy succeeds. See the `reset-env-branches` job in [examples/lambda-codeitem-workflow.yml](examples/lambda-codeitem-workflow.yml) and [examples/lambda-layer-codeitem-workflow.yml](examples/lambda-layer-codeitem-workflow.yml).
+2. **Optional manual/scheduled:** To run reset on demand (Actions tab) or on a schedule (e.g. weekly), copy [examples/reset-env-branches-triggers.yml](examples/reset-env-branches-triggers.yml) into your repo as `.github/workflows/reset-env-branches-triggers.yml`.
+
+The reusable workflow `reset-env-branches.yml` is call-only (no `push` or `schedule` in the workflow file). It runs in the **caller repository** context and only performs the reset when `github.ref` is `main`.
+
 ## 🔧 Composite Actions
 
 ### `setup-aws`
@@ -391,6 +422,7 @@ See `examples/` directory for complete codeitem configurations.
 | `.default-deploy` (Lambda) | `lambda-deploy.yml`            | ✅ Enhanced |
 | `.default-plan`            | `terraform-workflow.yml`       | ✅ Complete |
 | `.default-apply`           | `terraform-workflow.yml`       | ✅ Complete |
+| `.default-reset_env_branches` | `reset-env-branches.yml`    | ✅ Complete |
 
 **All workflows support:**
 
@@ -408,6 +440,7 @@ See `examples/` directory for complete codeitem configurations.
 - [x] Documentation verification
 - [x] Enhanced Python testing with S3 uploads
 - [x] S3 report upload action
+- [x] Environment branch reset (env/dev from main)
 - [ ] Docker build/push workflow
 - [ ] Helm deployment workflow
 - [ ] Matrix build examples

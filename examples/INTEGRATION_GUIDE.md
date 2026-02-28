@@ -45,7 +45,7 @@ This guide explains how to integrate the reusable workflow templates into your L
 Add these secrets in your repository (Settings → Secrets and variables → Actions):
 
 - `AWS_ROLE_ARN_DEV` - IAM role ARN for dev environment
-- `AWS_ACCOUNT_ID_DEV` - AWS account ID for dev environment  
+- `AWS_ACCOUNT_ID_DEV` - AWS account ID for dev environment
 - `AWS_ROLE_ARN_PRD` - IAM role ARN for production environment
 - `AWS_ACCOUNT_ID_PRD` - AWS account ID for production environment
 
@@ -133,18 +133,3 @@ After integration:
 - See `README.md` for detailed workflow documentation
 - See `examples/lambda-codeitem-workflow.yml` for the template
 - See `github-e2-lambda/.github/workflows/deploy.yml` for a working example
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

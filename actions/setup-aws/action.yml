@@ -34,27 +34,26 @@ runs:
         aws-region: ${{ inputs.aws-region }}
         role-session-name: ${{ inputs.role-session-name }}
         role-duration-seconds: ${{ inputs.role-duration-seconds }}
-    
+
     - name: Verify AWS credentials
       id: verify
       shell: bash
       run: |
         echo "=== AWS Credentials Verification ==="
-        
+
         # Get caller identity
         IDENTITY=$(aws sts get-caller-identity)
-        
+
         # Extract and display information
         ACCOUNT_ID=$(echo $IDENTITY | jq -r '.Account')
         ARN=$(echo $IDENTITY | jq -r '.Arn')
         USER_ID=$(echo $IDENTITY | jq -r '.UserId')
-        
+
         echo "Account ID: ${ACCOUNT_ID}"
         echo "ARN: ${ARN}"
         echo "User ID: ${USER_ID}"
-        
+
         # Set output
         echo "account_id=${ACCOUNT_ID}" >> $GITHUB_OUTPUT
-        
-        echo "✅ AWS credentials configured successfully"
 
+        echo "✅ AWS credentials configured successfully"

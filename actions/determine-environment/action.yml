@@ -37,7 +37,7 @@ runs:
         echo "Branch: ${BRANCH_NAME}"
         echo "Event: ${EVENT_NAME}"
         echo "Base ref: ${BASE_REF}"
-        
+
         # For pull requests, use base branch (target)
         if [[ "${EVENT_NAME}" == "pull_request" ]]; then
           BRANCH="${BASE_REF}"
@@ -45,7 +45,7 @@ runs:
         else
           BRANCH="${BRANCH_NAME}"
         fi
-        
+
         # Determine environment based on branch (matches GitLab CI pattern)
         case "${BRANCH}" in
           main)
@@ -87,18 +87,17 @@ runs:
             echo "⚠️  Unknown branch pattern: ${BRANCH}"
             ;;
         esac
-        
+
         echo "Environment: ${ENVIRONMENT}"
         echo "AWS Role Variable: ${AWS_ROLE_VAR}"
         echo "Deploy Allowed: ${DEPLOY_ALLOWED}"
         echo "Is Production: ${IS_PRODUCTION}"
-        
+
         # Set outputs
         echo "environment=${ENVIRONMENT}" >> $GITHUB_OUTPUT
         echo "aws_role_var=${AWS_ROLE_VAR}" >> $GITHUB_OUTPUT
         echo "deploy_allowed=${DEPLOY_ALLOWED}" >> $GITHUB_OUTPUT
         echo "is_production=${IS_PRODUCTION}" >> $GITHUB_OUTPUT
-        
+
         # Note: Actual AWS role ARN must be passed from secrets in calling workflow
         # We output the variable name so caller knows which secret to use
-

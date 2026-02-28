@@ -259,4 +259,3 @@ When pilot migration succeeds:
 
 *Phase 1 completed on [DATE]*
 *Ready for pilot migration selection*
-

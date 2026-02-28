@@ -13,24 +13,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Mypy type checking with XML reports and coverage
   - CloudFormation/SAM template linting (cfn-lint)
   - S3 report uploads matching GitLab CI pattern
-  
+
 - **Security Scans Workflow** (`security-scans.yml`)
   - Bandit security scanning with XML reports
   - Checkov infrastructure security scanning (same skip-checks as GitLab)
   - Radon complexity analysis (cyclomatic complexity, maintainability index)
   - S3 report uploads for CloudBot integration
-  
+
 - **Code Analyzer Workflow** (`code-analyzer.yml`)
   - Git archive creation (tar.gz format)
   - Upload to CloudBot artifacts bucket for code analysis
   - KMS encryption support
   - Matches GitLab CI code analyzer pattern
-  
+
 - **Verify Docs Workflow** (`verify-docs.yml`)
   - README.md existence check
   - Markdownlint validation
   - Matches GitLab CI verify_docs job
-  
+
 - **S3 Upload Action** (`actions/upload-s3-report/`)
   - Composite action for uploading reports to S3
   - Preserves file extensions (.txt, .xml, .json)
@@ -46,7 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Function name discovery from stack outputs
   - Improved smoke testing with better payload handling
   - Comprehensive error messages and debugging
-  
+
 - **Python Test Workflow** (`python-test.yml`)
   - Added S3 upload support for test and coverage reports
   - Maintains existing pytest, coverage, and Codecov features
@@ -211,4 +211,3 @@ For issues or questions:
 
 [Unreleased]: https://github.com/your-org/github-actions-templates/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/your-org/github-actions-templates/releases/tag/v1.0.0
-

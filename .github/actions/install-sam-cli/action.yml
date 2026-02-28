@@ -21,7 +21,7 @@ runs:
         fi
 
         echo "=== Installing SAM CLI ==="
-        
+
         # Try installing with --user flag first (avoids externally-managed-environment error)
         if $PYTHON_CMD -m pip install --user aws-sam-cli 2>&1; then
           echo "✅ SAM CLI installed with --user flag"
@@ -39,7 +39,7 @@ runs:
             source "$VENV_DIR/bin/activate" 2>/dev/null || true
             export PATH="$VENV_DIR/bin:$PATH"
             echo "$VENV_DIR/bin" >> $GITHUB_PATH
-            
+
             # Install pip in venv if needed
             if [ ! -f "$VENV_DIR/bin/pip" ]; then
               curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || true
@@ -48,7 +48,7 @@ runs:
                 rm -f /tmp/get-pip.py
               fi
             fi
-            
+
             # Install SAM CLI in venv
             if [ -f "$VENV_DIR/bin/pip" ]; then
               "$VENV_DIR/bin/pip" install aws-sam-cli 2>&1
@@ -62,7 +62,7 @@ runs:
             exit 1
           fi
         fi
-        
+
         # Verify SAM CLI is available
         if command -v sam &> /dev/null; then
           sam --version
@@ -72,5 +72,3 @@ runs:
         fi
       env:
         HOME: ${{ github.workspace }}/.home
-
-

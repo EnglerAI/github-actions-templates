@@ -1,0 +1,75 @@
+---
+repos:
+  # Common checks for all file types
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+        # Exclude GitLab CI, Helm templates, and CloudFormation/SAM templates
+        # GitLab CI uses !reference and other GitLab-specific tags
+        # Helm templates use {{ }} syntax that standard YAML parsers don't understand
+        # SAM/CloudFormation templates use !Ref, {{resolve:}} etc. - validated by cfn-lint
+        exclude: '\.gitlab-ci\.yml$|^\.gitlab/|k8s/templates/|charts/.*/templates/|template\.(yml|yaml)$'
+      - id: check-json
+      - id: check-xml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: detect-private-key
+      - id: detect-aws-credentials
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+        args: ["--fix=auto"]
+
+  # Python linting (matches GitLab CI: flake8)
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.3.0
+    hooks:
+      - id: flake8
+        args: ["--max-line-length=120", "--extend-ignore=D"]
+        additional_dependencies:
+          - flake8-docstrings
+        exclude: ^tests/
+
+  # Python type checking (matches GitLab CI: mypy)
+  # Note: Using lighter settings for pre-commit (full strict check in CI)
+  # Exclude tests/ and test_*.py (mocks use sys.modules and runtime-only Lambda layers)
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.19.1
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - types-requests
+          - types-PyMySQL
+        args: ["--ignore-missing-imports", "--no-strict-optional", "--explicit-package-bases"]
+        exclude: ^tests/|test_.*\.py$
+
+  # Python security scanning (matches GitLab CI: bandit)
+  # Note: Lighter scan for pre-commit (full scan in CI)
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.3
+    hooks:
+      - id: bandit
+        args: ["-r", ".", "-ll", "-x", "tests/", "-x", "terraform/"]
+        pass_filenames: false  # Scan entire directory, not individual files
+
+  # Shell script linting
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.11.0
+    hooks:
+      - id: shellcheck
+
+  # YAML linting (for config files, not GitLab CI, Helm, or CloudFormation templates)
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
+        args: ["--config-data", "{extends: default, rules: {line-length: {max: 120, level: warning}}}"]
+        exclude: '\.gitlab-ci\.yml$|k8s/templates/|charts/.*/templates/|template\.(yml|yaml)$'
+
+  # CloudFormation / SAM template linting (validates template.yml)
+  - repo: https://github.com/aws-cloudformation/cfn-lint
+    rev: v1.43.4
+    hooks:
+      - id: cfn-lint
+        files: ^template\.(yml|yaml)$
