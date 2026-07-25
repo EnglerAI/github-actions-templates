@@ -357,8 +357,11 @@ Run manually from Actions tab and check output.
 
 **Causes:**
 1. OIDC provider not created
-2. Trust policy doesn't match repository
+2. Trust policy doesn't match repository / `sub` format
 3. Missing `id-token: write` permission
+4. **Immutable OIDC `sub` mismatch** — after 2026-07-15, new repos and transferred repos use
+   `repo:ORG@ORG_ID/REPO@REPO_ID:ref:...` instead of `repo:ORG/REPO:ref:...`.
+   A trust pattern of only `repo:EnglerAI/*:*` does **not** match the immutable form.
 
 **Solutions:**
 ```yaml
@@ -367,6 +370,15 @@ permissions:
   id-token: write  # REQUIRED for OIDC
   contents: read
 ```
+
+Allow **both** classic and immutable subjects in the IAM role trust `StringLike` list, e.g.:
+
+```text
+repo:EnglerAI/*:*
+repo:EnglerAI@177352545/*:*
+```
+
+Check CloudTrail `AssumeRoleWithWebIdentity` denials — `userIdentity.userName` shows the exact `sub` AWS rejected.
 
 ### Error: "An error occurred (AccessDenied) when calling..."
 

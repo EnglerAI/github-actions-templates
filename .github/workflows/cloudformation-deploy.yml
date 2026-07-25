@@ -67,6 +67,9 @@ on:
       subnet_ids_prd:
         description: "Optional comma-delimited Subnet IDs for VPC configuration (PRD)"
         required: false
+      cognito_user_pool_id:
+        description: "Cognito User Pool ID for API Gateway authorizer (env-specific)"
+        required: false
 
 jobs:
   deploy:
@@ -200,6 +203,12 @@ jobs:
             PARAM_OVERRIDES="ACCOUNTID=${{ secrets.accountid }}"
           else
             PARAM_OVERRIDES="ACCOUNTID=${{ secrets.aws_account_id }}"
+          fi
+
+          # Add Cognito User Pool ID when provided (required if template has no default)
+          if [ -n "${{ secrets.cognito_user_pool_id }}" ]; then
+            PARAM_OVERRIDES="${PARAM_OVERRIDES} CognitoUserPoolId=${{ secrets.cognito_user_pool_id }}"
+            echo "Cognito User Pool ID provided for API Gateway authorizer"
           fi
 
           # Add VPC configuration if provided
