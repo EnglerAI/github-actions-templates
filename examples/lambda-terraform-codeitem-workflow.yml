@@ -1,0 +1,17 @@
+# Example: Lambda + Terraform Function API Workflow
+# Copy patterns from template-sw-fun-api-tf-py-simple/.github/workflows/deploy.yml
+# Reusable workflow: lambda-terraform-deploy.yml (package → S3 → terraform apply)
+
+name: Lambda Terraform Example
+
+on:
+  workflow_dispatch:
+
+jobs:
+  note:
+    runs-on: ubuntu-latest
+    steps:
+      - name: See template-sw-fun-api-tf-py-simple
+        run: |
+          echo "Use github-templates/template-sw-fun-api-tf-py-simple/.github/workflows/deploy.yml"
+          echo "and EnglerAI/github-actions-templates/.github/workflows/lambda-terraform-deploy.yml"
