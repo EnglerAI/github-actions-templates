@@ -1,0 +1,215 @@
+# Reusable workflow: package Lambda zip → S3 → terraform plan/apply
+# Mirrors GitLab .default-lambda_package + .default-lambda_artifact_upload + plan/apply
+name: Lambda Terraform Deploy
+
+on:
+  workflow_call:
+    inputs:
+      function_name:
+        description: "Name of Lambda function / codeitem"
+        required: true
+        type: string
+      environment:
+        description: "Target environment (dev/qat/stg/prd)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region"
+        required: true
+        type: string
+        default: "us-east-2"
+      python_version:
+        description: "Python version"
+        required: false
+        type: string
+        default: "3.12"
+      requirements_file:
+        description: "Path to requirements.txt"
+        required: false
+        type: string
+        default: "requirements.txt"
+      terraform_version:
+        description: "Terraform version"
+        required: false
+        type: string
+        default: "1.14.3"
+      terraform_directory:
+        description: "Terraform working directory"
+        required: false
+        type: string
+        default: "terraform"
+      state_bucket:
+        description: "S3 bucket for Terraform state"
+        required: true
+        type: string
+      state_key:
+        description: "S3 key for Terraform state"
+        required: true
+        type: string
+      state_table:
+        description: "DynamoDB table for state locking"
+        required: false
+        type: string
+        default: ""
+      kms_key_alias:
+        description: "KMS key alias for S3 encryption of Lambda package"
+        required: false
+        type: string
+        default: "alias/CloudBotPipelineKey"
+      runner:
+        description: "Runner label"
+        required: false
+        type: string
+        default: "ubuntu-latest"
+    secrets:
+      aws_role_arn:
+        description: "AWS IAM role ARN for OIDC"
+        required: true
+      aws_account_id:
+        description: "AWS Account ID"
+        required: true
+      cognito_user_pool_id:
+        description: "Cognito User Pool ID for API Gateway authorizer"
+        required: true
+      gitlab_api_token:
+        description: "GitLab API token for private packages"
+        required: false
+
+jobs:
+  package:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Package Lambda function
+        run: |
+          set -e
+          echo "=== Packaging Lambda Function ==="
+          mkdir -p package
+
+          if [ -f "${{ inputs.requirements_file }}" ]; then
+            echo "Installing dependencies..."
+            if [ -n "${{ secrets.gitlab_api_token }}" ]; then
+              pip install \
+                --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
+                -r ${{ inputs.requirements_file }} \
+                -t package/ || pip install -r ${{ inputs.requirements_file }} -t package/
+            else
+              pip install -r ${{ inputs.requirements_file }} -t package/
+            fi
+          else
+            echo "No requirements.txt found, skipping dependency installation"
+          fi
+
+          if [ -f "lambda_function.py" ]; then
+            cp lambda_function.py package/
+          elif [ -f "app.py" ]; then
+            cp app.py package/
+          else
+            echo "Error: No lambda_function.py or app.py found"
+            exit 1
+          fi
+
+          # Exclude options_lambda.py (packaged separately by Terraform archive_file)
+          find . -maxdepth 1 -name "*.py" \
+            ! -name "setup.py" \
+            ! -name "test_*.py" \
+            ! -name "*_test.py" \
+            ! -name "options_lambda.py" \
+            -exec cp {} package/ \;
+
+          (cd package && zip -r ../function.zip . -x "*.pyc" -x "*__pycache__*" -x "*.git*")
+          ls -lh function.zip
+          echo "✅ Lambda package created"
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-package-${{ inputs.environment }}
+          path: function.zip
+          retention-days: 1
+
+  deploy:
+    needs: [package]
+    runs-on: ${{ inputs.runner }}
+    environment:
+      name: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lambda-package-${{ inputs.environment }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions-lambda-terraform-deploy
+
+      - name: Upload package to S3
+        id: upload
+        run: |
+          set -e
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${{ inputs.aws_region }}-${{ secrets.aws_account_id }}"
+          S3_KEY="lambda-packages/${{ inputs.function_name }}/function-${{ github.sha }}.zip"
+
+          echo "Uploading function.zip to s3://${ARTIFACTS_BUCKET}/${S3_KEY}"
+          aws s3 cp function.zip "s3://${ARTIFACTS_BUCKET}/${S3_KEY}" \
+            --sse aws:kms \
+            --sse-kms-key-id ${{ inputs.kms_key_alias }} \
+            --region ${{ inputs.aws_region }}
+
+          echo "artifacts_bucket=${ARTIFACTS_BUCKET}" >> $GITHUB_OUTPUT
+          echo "s3_key=${S3_KEY}" >> $GITHUB_OUTPUT
+          echo "✅ Upload complete"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - name: Terraform Init
+        working-directory: ${{ inputs.terraform_directory }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ inputs.state_bucket }}" \
+            -backend-config="key=${{ inputs.state_key }}" \
+            -backend-config="region=${{ inputs.aws_region }}" \
+            ${{ inputs.state_table != '' && format('-backend-config="dynamodb_table={0}"', inputs.state_table) || '' }} \
+            -backend-config="encrypt=true"
+
+      - name: Terraform Plan and Apply
+        working-directory: ${{ inputs.terraform_directory }}
+        env:
+          TF_VAR_artifacts_bucket: ${{ steps.upload.outputs.artifacts_bucket }}
+          TF_VAR_s3_key: ${{ steps.upload.outputs.s3_key }}
+          TF_VAR_function_name: ${{ inputs.function_name }}
+          TF_VAR_stage_name: ${{ inputs.environment }}
+          TF_VAR_cognito_user_pool_id: ${{ secrets.cognito_user_pool_id }}
+          TF_VAR_aws_region: ${{ inputs.aws_region }}
+        run: |
+          set -e
+          terraform plan -no-color -out=tfplan
+          terraform apply -auto-approve tfplan
+          terraform output -json > outputs.json
+          cat outputs.json
+
+      - name: Upload terraform outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs-${{ inputs.environment }}
+          path: ${{ inputs.terraform_directory }}/outputs.json
+          retention-days: 30
