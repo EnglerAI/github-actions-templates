@@ -650,14 +650,8 @@ jobs:
         working-directory: ${{ inputs.working_directory }}
         run: |
           if [ -f "coverage.xml" ]; then
-            # Extract coverage percentage from coverage.xml
-            COVERAGE=$(python -c "
-            import xml.etree.ElementTree as ET
-            tree = ET.parse('coverage.xml')
-            root = tree.getroot()
-            line_rate = float(root.get('line-rate', 0))
-            print(f'{line_rate * 100:.2f}')
-            " || echo "0")
+            # One-liner: multiline python -c inherits YAML indent and raises IndentationError
+            COVERAGE=$(python -c "import xml.etree.ElementTree as ET; print(f'{float(ET.parse(\"coverage.xml\").getroot().get(\"line-rate\", 0)) * 100:.2f}')" || echo "0")
 
             echo "Coverage: ${COVERAGE}%"
             echo "Threshold: ${{ inputs.coverage_threshold }}%"
