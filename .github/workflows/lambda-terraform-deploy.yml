@@ -116,12 +116,11 @@ jobs:
             exit 1
           fi
 
-          # Exclude options_lambda.py (packaged separately by Terraform archive_file)
+          # Include options_lambda.py when present (OPTIONS helper shares this zip)
           find . -maxdepth 1 -name "*.py" \
             ! -name "setup.py" \
             ! -name "test_*.py" \
             ! -name "*_test.py" \
-            ! -name "options_lambda.py" \
             -exec cp {} package/ \;
 
           (cd package && zip -r ../function.zip . -x "*.pyc" -x "*__pycache__*" -x "*.git*")
