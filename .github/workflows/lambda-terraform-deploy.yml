@@ -211,11 +211,20 @@ jobs:
             exit 1
           fi
           echo "Backend key=${STATE_KEY}"
+          LOCK_ARGS="-backend-config=use_lockfile=true"
+          if [ -n "${STATE_TABLE}" ]; then
+            # Explicit DynamoDB lock table (legacy); otherwise S3 native lockfile
+            LOCK_ARGS="-backend-config=dynamodb_table=${STATE_TABLE}"
+            echo "Using DynamoDB state lock table=${STATE_TABLE}"
+          else
+            echo "Using S3 native state lockfile (use_lockfile=true)"
+          fi
+          # shellcheck disable=SC2086
           terraform init \
             -backend-config="bucket=${STATE_BUCKET}" \
             -backend-config="key=${STATE_KEY}" \
             -backend-config="region=${AWS_REGION_INPUT}" \
-            ${STATE_TABLE:+-backend-config="dynamodb_table=${STATE_TABLE}"} \
+            ${LOCK_ARGS} \
             -backend-config="encrypt=true"
 
       - name: Terraform Plan and Apply
