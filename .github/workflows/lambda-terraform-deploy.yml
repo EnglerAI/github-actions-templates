@@ -183,6 +183,14 @@ jobs:
       - name: Terraform Init
         working-directory: ${{ inputs.terraform_directory }}
         run: |
+          set -e
+          if [ -z "${{ inputs.state_bucket }}" ]; then
+            echo "❌ inputs.state_bucket is empty; cannot initialize S3 backend."
+            echo "Set TF_STATE_BUCKET_* repository variable or pass state_bucket to this workflow."
+            exit 1
+          fi
+          echo "Backend bucket=${{ inputs.state_bucket }}"
+          echo "Backend key=${{ inputs.state_key }}"
           terraform init \
             -backend-config="bucket=${{ inputs.state_bucket }}" \
             -backend-config="key=${{ inputs.state_key }}" \
