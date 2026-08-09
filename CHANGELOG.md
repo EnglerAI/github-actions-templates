@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed - Lambda smoke test (`lambda-deploy.yml`)
+- Set `--cli-read-timeout` to Lambda `Timeout + 30` so invokes no longer race the AWS CLI default 60s read timeout (false `Read timeout on endpoint URL` on 40–60s functions).
+- Parse invoke **metadata** (`StatusCode`, `FunctionError`) from CLI stdout instead of `response.json` (payload only).
+- Fail on any `FunctionError` (including `Unhandled` / `Sandbox.Timedout`); stop treating payload `errorMessage` alone as success (that false-passed timeouts).
+- Still accept application-level handled failures (e.g. `statusCode` 4xx) as “invoked successfully” for invalid default smoke payloads.
+
 ### Added - Phase 1.5 Enhancements
 - **Quality Checks Workflow** (`quality-checks.yml`)
   - Flake8 linting with 4 report types (code, tests, docs)
