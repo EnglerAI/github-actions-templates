@@ -61,6 +61,11 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    # Must match install-sam-cli / setup-aws-path: pip --user installs under this
+    # HOME. Without it, `sam` is on PATH from GITHUB_PATH but samcli is missing
+    # (ModuleNotFoundError) because Python looks under /home/runner/.local.
+    env:
+      HOME: ${{ github.workspace }}/.home
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -85,9 +90,14 @@ jobs:
       - name: Install SAM CLI
         uses: EnglerAI/github-actions-templates/.github/actions/install-sam-cli@main
 
+      - name: Setup AWS Path
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-aws-path@main
+
       - name: Deploy CloudFormation stack
         run: |
           set -e
+          # Ensure user-local / venv sam stays visible (same as cloudformation-deploy)
+          export PATH="${HOME}/.local/bin:${HOME}/sam-venv/bin:${PATH}"
           STACK_NAME="${{ inputs.stack_name }}"
           TEMPLATE_FILE="${{ inputs.template_file }}"
 
@@ -104,6 +114,7 @@ jobs:
           PARAM_OVERRIDES="${PARAM_OVERRIDES} NAME=${{ inputs.project_name }} Environment=${{ inputs.environment }}"
 
           echo "=== Deploying ${STACK_NAME} ==="
+          sam --version
           sam deploy \
             --template-file "${TEMPLATE_FILE}" \
             --stack-name "${STACK_NAME}" \
