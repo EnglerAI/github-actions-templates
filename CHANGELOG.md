@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Vue SPA deploy workflows
+- **`vue-static-deploy.yml`** — npm build → S3 sync → CloudFront invalidation
+- **`vue-cf-deploy.yml`** — CloudFormation (S3+CloudFront) then Vue static deploy
+- **`vue-terraform-deploy.yml`** — Terraform plan/apply then Vue static deploy
+- Example: `examples/vue-terraform-codeitem-workflow.yml`
+
 ### Fixed - Lambda smoke test (`lambda-deploy.yml`)
 - Set `--cli-read-timeout` to Lambda `Timeout + 30` so invokes no longer race the AWS CLI default 60s read timeout (false `Read timeout on endpoint URL` on 40–60s functions).
 - Parse invoke **metadata** (`StatusCode`, `FunctionError`) from CLI stdout instead of `response.json` (payload only).

@@ -1,0 +1,106 @@
+# Example: Vue SPA + Terraform (S3+CloudFront) codeitem deploy workflow
+# Copy to .github/workflows/deploy.yml and replace project_name / state key placeholders.
+name: Deploy Vue SPA Terraform
+
+on:
+  push:
+    branches:
+      - main
+      - env/dev
+  pull_request:
+    branches:
+      - main
+      - env/dev
+
+permissions: {}
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      deploy_allowed: ${{ steps.env.outputs.deploy_allowed }}
+      state_key: ${{ steps.env.outputs.state_key }}
+      state_table: ${{ steps.env.outputs.state_table }}
+      vite_mode: ${{ steps.env.outputs.vite_mode }}
+    steps:
+      - name: Determine environment from branch
+        id: env
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BRANCH="${{ github.base_ref }}"
+            DEPLOY_ALLOWED="false"
+          else
+            BRANCH="${{ github.ref_name }}"
+            DEPLOY_ALLOWED="true"
+          fi
+
+          case "${BRANCH}" in
+            main)
+              ENV="prd"
+              VITE_MODE="production"
+              STATE_KEY="${{ vars.TF_STATE_KEY_PRD }}"
+              STATE_TABLE="${{ vars.TF_STATE_TABLE_PRD }}"
+              ;;
+            env/dev)
+              ENV="dev"
+              VITE_MODE="development"
+              STATE_KEY="${{ vars.TF_STATE_KEY_DEV }}"
+              STATE_TABLE="${{ vars.TF_STATE_TABLE_DEV }}"
+              ;;
+            *)
+              ENV="unknown"
+              VITE_MODE="production"
+              STATE_KEY=""
+              STATE_TABLE=""
+              DEPLOY_ALLOWED="false"
+              ;;
+          esac
+
+          if [ -z "${STATE_KEY}" ]; then
+            STATE_KEY="YOUR_REPO_NAME/${ENV}/terraform.tfstate"
+          fi
+          if [ -z "${STATE_TABLE}" ]; then
+            STATE_TABLE="terraformstatelock"
+          fi
+
+          echo "environment=${ENV}" >> $GITHUB_OUTPUT
+          echo "deploy_allowed=${DEPLOY_ALLOWED}" >> $GITHUB_OUTPUT
+          echo "state_key=${STATE_KEY}" >> $GITHUB_OUTPUT
+          echo "state_table=${STATE_TABLE}" >> $GITHUB_OUTPUT
+          echo "vite_mode=${VITE_MODE}" >> $GITHUB_OUTPUT
+
+  verify-docs:
+    permissions:
+      contents: read
+      actions: write
+    uses: EnglerAI/github-actions-templates/.github/workflows/verify-docs.yml@main
+    with:
+      runner: ubuntu-latest
+
+  deploy:
+    needs: [setup, verify-docs]
+    if: |
+      always() &&
+      needs.setup.outputs.deploy_allowed == 'true' &&
+      github.event_name == 'push' &&
+      (needs.verify-docs.result == 'success' || needs.verify-docs.result == 'skipped')
+    permissions:
+      id-token: write
+      contents: read
+    uses: EnglerAI/github-actions-templates/.github/workflows/vue-terraform-deploy.yml@main
+    with:
+      project_name: "YOUR_REPO_NAME"
+      environment: ${{ needs.setup.outputs.environment }}
+      aws_region: us-east-2
+      terraform_version: "1.14.3"
+      terraform_directory: terraform
+      state_bucket: ${{ needs.setup.outputs.environment == 'dev' && vars.TF_STATE_BUCKET_DEV || vars.TF_STATE_BUCKET_PRD }}
+      state_key: ${{ needs.setup.outputs.state_key }}
+      state_table: ${{ needs.setup.outputs.state_table }}
+      vite_mode: ${{ needs.setup.outputs.vite_mode }}
+      runner: ubuntu-latest
+    secrets:
+      aws_role_arn: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_PRD }}
+      aws_account_id: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ACCOUNT_ID_DEV || secrets.AWS_ACCOUNT_ID_PRD }}
+      tf_state_bucket: ${{ needs.setup.outputs.environment == 'dev' && secrets.TF_STATE_BUCKET_DEV || secrets.TF_STATE_BUCKET_PRD }}
