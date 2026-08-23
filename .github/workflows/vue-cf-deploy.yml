@@ -1,0 +1,191 @@
+# Reusable workflow: CloudFormation stack (S3+CloudFront) → Vue build → S3 sync
+# Compose: SAM/CF deploy + vue-static-deploy steps in one job (outputs feed sync)
+name: Vue CloudFormation Deploy
+
+on:
+  workflow_call:
+    inputs:
+      project_name:
+        description: "Project / codeitem name (used for NAME parameter)"
+        required: true
+        type: string
+      stack_name:
+        description: "CloudFormation stack name"
+        required: true
+        type: string
+      environment:
+        description: "Target environment (dev/qat/stg/prd)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region"
+        required: true
+        type: string
+        default: "us-east-2"
+      template_file:
+        description: "Path to CloudFormation template"
+        required: false
+        type: string
+        default: "template.yml"
+      node_version:
+        description: "Node.js version"
+        required: false
+        type: string
+        default: "20"
+      vite_mode:
+        description: "Vite build mode"
+        required: false
+        type: string
+        default: "production"
+      runner:
+        description: "Runner label"
+        required: false
+        type: string
+        default: "ubuntu-latest"
+    secrets:
+      aws_role_arn:
+        description: "AWS IAM role ARN for OIDC"
+        required: true
+      aws_account_id:
+        description: "AWS Account ID"
+        required: true
+      accountid:
+        description: "CloudBot Account ID (optional ACCOUNTID parameter)"
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ${{ inputs.runner }}
+    environment:
+      name: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions-vue-cf-deploy
+
+      - name: Verify AWS Account
+        run: |
+          set -e
+          ACTUAL_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          if [ "${ACTUAL_ACCOUNT}" != "${{ secrets.aws_account_id }}" ]; then
+            echo "❌ Account mismatch: expected ${{ secrets.aws_account_id }}, got ${ACTUAL_ACCOUNT}"
+            exit 1
+          fi
+          echo "✅ Authenticated to account ${ACTUAL_ACCOUNT}"
+
+      - name: Install SAM CLI
+        uses: EnglerAI/github-actions-templates/.github/actions/install-sam-cli@main
+
+      - name: Deploy CloudFormation stack
+        run: |
+          set -e
+          STACK_NAME="${{ inputs.stack_name }}"
+          TEMPLATE_FILE="${{ inputs.template_file }}"
+
+          if [ ! -f "${TEMPLATE_FILE}" ]; then
+            echo "❌ Template not found: ${TEMPLATE_FILE}"
+            exit 1
+          fi
+
+          if [ -n "${{ secrets.accountid }}" ]; then
+            PARAM_OVERRIDES="ACCOUNTID=${{ secrets.accountid }}"
+          else
+            PARAM_OVERRIDES="ACCOUNTID=${{ secrets.aws_account_id }}"
+          fi
+          PARAM_OVERRIDES="${PARAM_OVERRIDES} NAME=${{ inputs.project_name }} Environment=${{ inputs.environment }}"
+
+          echo "=== Deploying ${STACK_NAME} ==="
+          sam deploy \
+            --template-file "${TEMPLATE_FILE}" \
+            --stack-name "${STACK_NAME}" \
+            --parameter-overrides ${PARAM_OVERRIDES} \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset \
+            --region "${{ inputs.aws_region }}"
+
+          echo "✅ Stack deploy complete"
+
+      - name: Read stack outputs
+        id: outputs
+        run: |
+          set -e
+          STACK_NAME="${{ inputs.stack_name }}"
+          OUTPUTS=$(aws cloudformation describe-stacks \
+            --stack-name "${STACK_NAME}" \
+            --region "${{ inputs.aws_region }}" \
+            --query 'Stacks[0].Outputs' \
+            --output json)
+
+          S3_BUCKET=$(echo "${OUTPUTS}" | jq -r '.[] | select(.OutputKey=="WebsiteBucketName") | .OutputValue')
+          DISTRIBUTION_ID=$(echo "${OUTPUTS}" | jq -r '.[] | select(.OutputKey=="CloudFrontDistributionId") | .OutputValue')
+          DOMAIN=$(echo "${OUTPUTS}" | jq -r '.[] | select(.OutputKey=="CloudFrontDomainName") | .OutputValue')
+
+          if [ -z "${S3_BUCKET}" ] || [ "${S3_BUCKET}" = "null" ]; then
+            echo "❌ WebsiteBucketName output missing"
+            exit 1
+          fi
+          if [ -z "${DISTRIBUTION_ID}" ] || [ "${DISTRIBUTION_ID}" = "null" ]; then
+            echo "❌ CloudFrontDistributionId output missing"
+            exit 1
+          fi
+
+          echo "s3_bucket=${S3_BUCKET}" >> $GITHUB_OUTPUT
+          echo "distribution_id=${DISTRIBUTION_ID}" >> $GITHUB_OUTPUT
+          echo "domain=${DOMAIN}" >> $GITHUB_OUTPUT
+          echo "Bucket=${S3_BUCKET} Distribution=${DISTRIBUTION_ID} Domain=${DOMAIN}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Vue application
+        run: |
+          set -e
+          npm run build -- --mode "${{ inputs.vite_mode }}"
+          ls -lah dist/
+
+      - name: Sync static assets to S3
+        env:
+          S3_BUCKET: ${{ steps.outputs.outputs.s3_bucket }}
+        run: |
+          set -e
+          aws s3 sync dist/ "s3://${S3_BUCKET}/" \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "index.html" \
+            --exclude "*.txt" \
+            --exclude "robots.txt" \
+            --exclude "manifest.json"
+
+          aws s3 cp dist/index.html "s3://${S3_BUCKET}/index.html" \
+            --cache-control "public, max-age=0, must-revalidate" \
+            --metadata-directive REPLACE
+
+          echo "✅ S3 sync complete"
+
+      - name: Invalidate CloudFront
+        env:
+          DISTRIBUTION_ID: ${{ steps.outputs.outputs.distribution_id }}
+        run: |
+          set -e
+          INVALIDATION_ID=$(aws cloudfront create-invalidation \
+            --distribution-id "${DISTRIBUTION_ID}" \
+            --paths "/*" \
+            --query 'Invalidation.Id' \
+            --output text)
+          echo "Invalidation: ${INVALIDATION_ID}"
+          echo "✅ Vue CF deploy complete — https://${{ steps.outputs.outputs.domain }}"

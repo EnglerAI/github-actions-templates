@@ -1,0 +1,221 @@
+# Reusable workflow: Terraform (S3+CloudFront) → Vue build → S3 sync
+# Mirrors GitLab vue TF path: plan/apply then vue_build/vue_deploy
+name: Vue Terraform Deploy
+
+on:
+  workflow_call:
+    inputs:
+      project_name:
+        description: "Project / codeitem name (TF_VAR_project_name)"
+        required: true
+        type: string
+      environment:
+        description: "Target environment (dev/qat/stg/prd)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region"
+        required: true
+        type: string
+        default: "us-east-2"
+      terraform_version:
+        description: "Terraform version"
+        required: false
+        type: string
+        default: "1.14.3"
+      terraform_directory:
+        description: "Terraform working directory"
+        required: false
+        type: string
+        default: "terraform"
+      state_bucket:
+        description: "S3 bucket for Terraform state (optional; vars preferred)"
+        required: false
+        type: string
+        default: ""
+      state_key:
+        description: "S3 key for Terraform state"
+        required: true
+        type: string
+      state_table:
+        description: "DynamoDB table for state locking"
+        required: false
+        type: string
+        default: ""
+      node_version:
+        description: "Node.js version"
+        required: false
+        type: string
+        default: "20"
+      vite_mode:
+        description: "Vite build mode"
+        required: false
+        type: string
+        default: "production"
+      runner:
+        description: "Runner label"
+        required: false
+        type: string
+        default: "ubuntu-latest"
+    secrets:
+      aws_role_arn:
+        description: "AWS IAM role ARN for OIDC"
+        required: true
+      aws_account_id:
+        description: "AWS Account ID"
+        required: true
+      tf_state_bucket:
+        description: "Optional TF state bucket secret"
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ${{ inputs.runner }}
+    environment:
+      name: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions-vue-terraform-deploy
+
+      - name: Verify AWS Account
+        run: |
+          set -e
+          ACTUAL_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          if [ "${ACTUAL_ACCOUNT}" != "${{ secrets.aws_account_id }}" ]; then
+            echo "❌ Account mismatch: expected ${{ secrets.aws_account_id }}, got ${ACTUAL_ACCOUNT}"
+            exit 1
+          fi
+          echo "✅ Authenticated to account ${ACTUAL_ACCOUNT}"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: ${{ inputs.terraform_directory }}
+        env:
+          INPUT_STATE_BUCKET: ${{ inputs.state_bucket }}
+          SECRET_STATE_BUCKET: ${{ secrets.tf_state_bucket }}
+          AWS_ACCOUNT_ID: ${{ secrets.aws_account_id }}
+          AWS_REGION_INPUT: ${{ inputs.aws_region }}
+          STATE_KEY: ${{ inputs.state_key }}
+          STATE_TABLE: ${{ inputs.state_table }}
+        run: |
+          set -e
+          STATE_BUCKET="${INPUT_STATE_BUCKET}"
+          if [ -z "${STATE_BUCKET}" ]; then
+            STATE_BUCKET="${SECRET_STATE_BUCKET}"
+          fi
+          if [ -z "${STATE_BUCKET}" ] && [ -n "${AWS_ACCOUNT_ID}" ]; then
+            STATE_BUCKET="cloudbot-terraform-state-${AWS_REGION_INPUT}-${AWS_ACCOUNT_ID}"
+            echo "Derived TF state bucket from aws_account_id"
+          fi
+          if [ -z "${STATE_BUCKET}" ]; then
+            echo "❌ Terraform state bucket is empty."
+            exit 1
+          fi
+          LOCK_ARGS="-backend-config=use_lockfile=true"
+          if [ -n "${STATE_TABLE}" ]; then
+            LOCK_ARGS="-backend-config=dynamodb_table=${STATE_TABLE}"
+          fi
+          # shellcheck disable=SC2086
+          terraform init \
+            -backend-config="bucket=${STATE_BUCKET}" \
+            -backend-config="key=${STATE_KEY}" \
+            -backend-config="region=${AWS_REGION_INPUT}" \
+            ${LOCK_ARGS} \
+            -backend-config="encrypt=true"
+
+      - name: Terraform Plan and Apply
+        working-directory: ${{ inputs.terraform_directory }}
+        env:
+          TF_VAR_project_name: ${{ inputs.project_name }}
+          TF_VAR_environment: ${{ inputs.environment }}
+          TF_VAR_aws_region: ${{ inputs.aws_region }}
+        run: |
+          set -e
+          terraform plan -no-color -out=tfplan
+          terraform apply -auto-approve tfplan
+          terraform output -json > outputs.json
+          cat outputs.json
+
+      - name: Read terraform outputs
+        id: outputs
+        working-directory: ${{ inputs.terraform_directory }}
+        run: |
+          set -e
+          S3_BUCKET=$(jq -r '.s3_bucket_name.value // empty' outputs.json)
+          DISTRIBUTION_ID=$(jq -r '.cloudfront_distribution_id.value // empty' outputs.json)
+          DOMAIN=$(jq -r '.cloudfront_domain_name.value // empty' outputs.json)
+
+          if [ -z "${S3_BUCKET}" ]; then
+            echo "❌ s3_bucket_name output missing"
+            exit 1
+          fi
+          if [ -z "${DISTRIBUTION_ID}" ]; then
+            echo "❌ cloudfront_distribution_id output missing"
+            exit 1
+          fi
+
+          echo "s3_bucket=${S3_BUCKET}" >> $GITHUB_OUTPUT
+          echo "distribution_id=${DISTRIBUTION_ID}" >> $GITHUB_OUTPUT
+          echo "domain=${DOMAIN}" >> $GITHUB_OUTPUT
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Vue application
+        run: |
+          set -e
+          npm run build -- --mode "${{ inputs.vite_mode }}"
+          ls -lah dist/
+
+      - name: Sync static assets to S3
+        env:
+          S3_BUCKET: ${{ steps.outputs.outputs.s3_bucket }}
+        run: |
+          set -e
+          aws s3 sync dist/ "s3://${S3_BUCKET}/" \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "index.html" \
+            --exclude "*.txt" \
+            --exclude "robots.txt" \
+            --exclude "manifest.json"
+
+          aws s3 cp dist/index.html "s3://${S3_BUCKET}/index.html" \
+            --cache-control "public, max-age=0, must-revalidate" \
+            --metadata-directive REPLACE
+
+          echo "✅ S3 sync complete"
+
+      - name: Invalidate CloudFront
+        env:
+          DISTRIBUTION_ID: ${{ steps.outputs.outputs.distribution_id }}
+        run: |
+          set -e
+          INVALIDATION_ID=$(aws cloudfront create-invalidation \
+            --distribution-id "${DISTRIBUTION_ID}" \
+            --paths "/*" \
+            --query 'Invalidation.Id' \
+            --output text)
+          echo "Invalidation: ${INVALIDATION_ID}"
+          echo "✅ Vue Terraform deploy complete — https://${{ steps.outputs.outputs.domain }}"
