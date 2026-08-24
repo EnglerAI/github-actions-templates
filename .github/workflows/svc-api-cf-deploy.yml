@@ -1,0 +1,213 @@
+# Compose: Docker build/push → Helm EKS → CloudFormation edge (API GW + VPC Link)
+name: SVC API CloudFormation Deploy
+
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        description: "Service / Helm release name"
+        required: true
+        type: string
+      service_namespace:
+        description: "URL path namespace (Flask + API GW)"
+        required: false
+        type: string
+        default: "hello"
+      stack_name:
+        description: "CloudFormation stack name"
+        required: true
+        type: string
+      environment:
+        description: "Target environment (dev/qat/stg/prd)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region"
+        required: true
+        type: string
+        default: "us-east-2"
+      cluster_name:
+        description: "EKS cluster name"
+        required: false
+        type: string
+        default: "cloudbot-eks-cluster"
+      helm_namespace:
+        description: "Kubernetes namespace"
+        required: false
+        type: string
+        default: "apps"
+      template_file:
+        description: "CloudFormation template path"
+        required: false
+        type: string
+        default: "template.yml"
+      runner:
+        description: "Runner label"
+        required: false
+        type: string
+        default: "ubuntu-latest"
+    secrets:
+      aws_role_arn:
+        required: true
+      aws_account_id:
+        required: true
+      gitlab_api_token:
+        required: false
+      cognito_user_pool_id:
+        required: true
+      cognito_user_pool_client_id:
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ${{ inputs.runner }}
+    environment:
+      name: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions-svc-api-cf-deploy
+
+      - name: Verify AWS Account
+        run: |
+          set -e
+          ACTUAL_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          if [ "${ACTUAL_ACCOUNT}" != "${{ secrets.aws_account_id }}" ]; then
+            echo "❌ Account mismatch: expected ${{ secrets.aws_account_id }}, got ${ACTUAL_ACCOUNT}"
+            exit 1
+          fi
+
+      - name: Set image metadata
+        id: meta
+        run: |
+          set -e
+          NAME=$(echo "${{ inputs.service_name }}" | tr '[:upper:]' '[:lower:]')
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "image_uri=ghcr.io/${OWNER}/${NAME}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            GITLAB_API_TOKEN=${{ secrets.gitlab_api_token }}
+          tags: |
+            ${{ steps.meta.outputs.image_uri }}:${{ steps.meta.outputs.image_tag }}
+            ${{ steps.meta.outputs.image_uri }}:${{ inputs.environment }}-latest
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Update kubeconfig
+        run: |
+          set -e
+          aws eks update-kubeconfig \
+            --name "${{ inputs.cluster_name }}" \
+            --region "${{ inputs.aws_region }}"
+
+      - name: Helm dependency update
+        working-directory: k8s
+        run: helm dependency update .
+
+      - name: Helm upgrade --install
+        env:
+          COGNITO_POOL: ${{ secrets.cognito_user_pool_id }}
+          COGNITO_CLIENT: ${{ secrets.cognito_user_pool_client_id }}
+        run: |
+          set -e
+          helm upgrade --install "${{ inputs.service_name }}" k8s \
+            --namespace "${{ inputs.helm_namespace }}" \
+            --create-namespace \
+            --set "image.repository=${{ steps.meta.outputs.image_uri }}" \
+            --set "image.tag=${{ steps.meta.outputs.image_tag }}" \
+            --set "env.AWS_REGION=${{ inputs.aws_region }}" \
+            --set "env.AWS_ACCOUNT_ID=${{ secrets.aws_account_id }}" \
+            --set "env.ENVIRONMENT=${{ inputs.environment }}" \
+            --set "env.TF_VAR_service_name=${{ inputs.service_name }}" \
+            --set "env.COGNITO_USER_POOL_ID=${COGNITO_POOL}" \
+            --set "env.COGNITO_USER_POOL_CLIENT_ID=${COGNITO_CLIENT}" \
+            --wait --timeout 10m
+
+      - name: Resolve NLB for CloudFormation
+        id: nlb
+        run: |
+          set -e
+          NLB_NAME="${{ inputs.service_name }}-nlb"
+          echo "Looking up NLB: ${NLB_NAME}"
+          for i in $(seq 1 30); do
+            NLB_ARN=$(aws elbv2 describe-load-balancers \
+              --names "${NLB_NAME}" \
+              --query 'LoadBalancers[0].LoadBalancerArn' \
+              --output text 2>/dev/null || echo "")
+            NLB_DNS=$(aws elbv2 describe-load-balancers \
+              --names "${NLB_NAME}" \
+              --query 'LoadBalancers[0].DNSName' \
+              --output text 2>/dev/null || echo "")
+            if [ -n "${NLB_ARN}" ] && [ "${NLB_ARN}" != "None" ] && [ -n "${NLB_DNS}" ] && [ "${NLB_DNS}" != "None" ]; then
+              echo "nlb_arn=${NLB_ARN}" >> "$GITHUB_OUTPUT"
+              echo "nlb_dns=${NLB_DNS}" >> "$GITHUB_OUTPUT"
+              echo "✅ Found NLB ${NLB_NAME}"
+              exit 0
+            fi
+            echo "Waiting for NLB (${i}/30)..."
+            sleep 20
+          done
+          echo "❌ NLB ${NLB_NAME} not found"
+          exit 1
+
+      - name: Deploy CloudFormation edge
+        run: |
+          set -e
+          case "${{ inputs.environment }}" in
+            prd) STAGE_ENV="Prd" ;;
+            dev) STAGE_ENV="Dev" ;;
+            qat) STAGE_ENV="Qat" ;;
+            stg) STAGE_ENV="Stg" ;;
+            *) STAGE_ENV="${{ inputs.environment }}" ;;
+          esac
+          aws cloudformation deploy \
+            --template-file "${{ inputs.template_file }}" \
+            --stack-name "${{ inputs.stack_name }}" \
+            --parameter-overrides \
+              ServiceName="${{ inputs.service_name }}" \
+              ServiceNamespace="${{ inputs.service_namespace }}" \
+              Environment="${STAGE_ENV}" \
+              CognitoUserPoolId="${{ secrets.cognito_user_pool_id }}" \
+              NlbArn="${{ steps.nlb.outputs.nlb_arn }}" \
+              NlbDnsName="${{ steps.nlb.outputs.nlb_dns }}" \
+              AwsRegion="${{ inputs.aws_region }}" \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset \
+            --region "${{ inputs.aws_region }}"
+
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name "${{ inputs.stack_name }}" \
+            --region "${{ inputs.aws_region }}" \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
+            --output text)
+          echo "✅ SVC API CloudFormation deploy complete — ${API_URL}"

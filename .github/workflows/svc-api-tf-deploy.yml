@@ -1,0 +1,230 @@
+# Compose: Docker build/push → Helm EKS → Terraform edge (API GW + VPC Link)
+name: SVC API Terraform Deploy
+
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        description: "Service / Helm release name"
+        required: true
+        type: string
+      service_namespace:
+        description: "URL path namespace (Flask + API GW)"
+        required: false
+        type: string
+        default: "hello"
+      environment:
+        description: "Target environment (dev/qat/stg/prd)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region"
+        required: true
+        type: string
+        default: "us-east-2"
+      cluster_name:
+        description: "EKS cluster name"
+        required: false
+        type: string
+        default: "cloudbot-eks-cluster"
+      helm_namespace:
+        description: "Kubernetes namespace"
+        required: false
+        type: string
+        default: "apps"
+      terraform_version:
+        description: "Terraform version"
+        required: false
+        type: string
+        default: "1.15.3"
+      terraform_directory:
+        description: "Terraform working directory"
+        required: false
+        type: string
+        default: "terraform"
+      state_bucket:
+        description: "S3 bucket for Terraform state"
+        required: false
+        type: string
+        default: ""
+      state_key:
+        description: "S3 key for Terraform state"
+        required: true
+        type: string
+      state_table:
+        description: "DynamoDB table for state locking"
+        required: false
+        type: string
+        default: ""
+      runner:
+        description: "Runner label"
+        required: false
+        type: string
+        default: "ubuntu-latest"
+    secrets:
+      aws_role_arn:
+        required: true
+      aws_account_id:
+        required: true
+      gitlab_api_token:
+        required: false
+      cognito_user_pool_id:
+        required: true
+      cognito_user_pool_client_id:
+        required: false
+      tf_state_bucket:
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ${{ inputs.runner }}
+    environment:
+      name: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions-svc-api-tf-deploy
+
+      - name: Verify AWS Account
+        run: |
+          set -e
+          ACTUAL_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          if [ "${ACTUAL_ACCOUNT}" != "${{ secrets.aws_account_id }}" ]; then
+            echo "❌ Account mismatch: expected ${{ secrets.aws_account_id }}, got ${ACTUAL_ACCOUNT}"
+            exit 1
+          fi
+
+      - name: Set image metadata
+        id: meta
+        run: |
+          set -e
+          NAME=$(echo "${{ inputs.service_name }}" | tr '[:upper:]' '[:lower:]')
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "image_uri=ghcr.io/${OWNER}/${NAME}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            GITLAB_API_TOKEN=${{ secrets.gitlab_api_token }}
+          tags: |
+            ${{ steps.meta.outputs.image_uri }}:${{ steps.meta.outputs.image_tag }}
+            ${{ steps.meta.outputs.image_uri }}:${{ inputs.environment }}-latest
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Update kubeconfig
+        run: |
+          set -e
+          aws eks update-kubeconfig \
+            --name "${{ inputs.cluster_name }}" \
+            --region "${{ inputs.aws_region }}"
+
+      - name: Helm dependency update
+        working-directory: k8s
+        run: helm dependency update .
+
+      - name: Helm upgrade --install
+        env:
+          COGNITO_POOL: ${{ secrets.cognito_user_pool_id }}
+          COGNITO_CLIENT: ${{ secrets.cognito_user_pool_client_id }}
+        run: |
+          set -e
+          helm upgrade --install "${{ inputs.service_name }}" k8s \
+            --namespace "${{ inputs.helm_namespace }}" \
+            --create-namespace \
+            --set "image.repository=${{ steps.meta.outputs.image_uri }}" \
+            --set "image.tag=${{ steps.meta.outputs.image_tag }}" \
+            --set "env.AWS_REGION=${{ inputs.aws_region }}" \
+            --set "env.AWS_ACCOUNT_ID=${{ secrets.aws_account_id }}" \
+            --set "env.ENVIRONMENT=${{ inputs.environment }}" \
+            --set "env.TF_VAR_service_name=${{ inputs.service_name }}" \
+            --set "env.COGNITO_USER_POOL_ID=${COGNITO_POOL}" \
+            --set "env.COGNITO_USER_POOL_CLIENT_ID=${COGNITO_CLIENT}" \
+            --wait --timeout 10m
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: ${{ inputs.terraform_directory }}
+        env:
+          INPUT_STATE_BUCKET: ${{ inputs.state_bucket }}
+          SECRET_STATE_BUCKET: ${{ secrets.tf_state_bucket }}
+          AWS_ACCOUNT_ID: ${{ secrets.aws_account_id }}
+          AWS_REGION_INPUT: ${{ inputs.aws_region }}
+          STATE_KEY: ${{ inputs.state_key }}
+          STATE_TABLE: ${{ inputs.state_table }}
+        run: |
+          set -e
+          STATE_BUCKET="${INPUT_STATE_BUCKET}"
+          if [ -z "${STATE_BUCKET}" ]; then
+            STATE_BUCKET="${SECRET_STATE_BUCKET}"
+          fi
+          if [ -z "${STATE_BUCKET}" ] && [ -n "${AWS_ACCOUNT_ID}" ]; then
+            STATE_BUCKET="cloudbot-terraform-state-${AWS_REGION_INPUT}-${AWS_ACCOUNT_ID}"
+          fi
+          if [ -z "${STATE_BUCKET}" ]; then
+            echo "❌ Terraform state bucket is empty."
+            exit 1
+          fi
+          LOCK_ARGS="-backend-config=use_lockfile=true"
+          if [ -n "${STATE_TABLE}" ]; then
+            LOCK_ARGS="-backend-config=dynamodb_table=${STATE_TABLE}"
+          fi
+          # shellcheck disable=SC2086
+          terraform init \
+            -backend-config="bucket=${STATE_BUCKET}" \
+            -backend-config="key=${STATE_KEY}" \
+            -backend-config="region=${AWS_REGION_INPUT}" \
+            ${LOCK_ARGS} \
+            -backend-config="encrypt=true"
+
+      - name: Terraform Plan and Apply
+        working-directory: ${{ inputs.terraform_directory }}
+        env:
+          TF_VAR_service_name: ${{ inputs.service_name }}
+          TF_VAR_service_namespace: ${{ inputs.service_namespace }}
+          TF_VAR_environment: ${{ inputs.environment }}
+          TF_VAR_aws_region: ${{ inputs.aws_region }}
+          TF_VAR_aws_account_id: ${{ secrets.aws_account_id }}
+          TF_VAR_cognito_user_pool_id: ${{ secrets.cognito_user_pool_id }}
+          TF_VAR_cognito_user_pool_client_id: ${{ secrets.cognito_user_pool_client_id }}
+          TF_VAR_cluster_name: ${{ inputs.cluster_name }}
+        run: |
+          set -e
+          terraform plan -no-color -out=tfplan
+          terraform apply -auto-approve tfplan
+          terraform output -json > outputs.json
+          echo "✅ SVC API Terraform deploy complete"
+          jq -r '.invoke_url.value // .api_url.value // empty' outputs.json || true
