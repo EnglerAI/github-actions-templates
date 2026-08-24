@@ -1,0 +1,116 @@
+# Reusable: Helm upgrade to EKS (cloudbot k8s chart under k8s/)
+name: Helm EKS Deploy
+
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        description: "Helm release / chart service name"
+        required: true
+        type: string
+      environment:
+        description: "Target environment (dev/qat/stg/prd)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region"
+        required: true
+        type: string
+        default: "us-east-2"
+      cluster_name:
+        description: "EKS cluster name"
+        required: false
+        type: string
+        default: "cloudbot-eks-cluster"
+      helm_namespace:
+        description: "Kubernetes namespace"
+        required: false
+        type: string
+        default: "apps"
+      helm_chart_path:
+        description: "Path to Helm chart"
+        required: false
+        type: string
+        default: "k8s"
+      image_repository:
+        description: "Container image repository (without tag)"
+        required: true
+        type: string
+      image_tag:
+        description: "Container image tag"
+        required: true
+        type: string
+      runner:
+        description: "Runner label"
+        required: false
+        type: string
+        default: "ubuntu-latest"
+    secrets:
+      aws_role_arn:
+        description: "AWS IAM role ARN for OIDC"
+        required: true
+      cognito_user_pool_id:
+        description: "Cognito user pool ID injected into pod env"
+        required: false
+      cognito_user_pool_client_id:
+        description: "Cognito user pool client ID"
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ${{ inputs.runner }}
+    environment:
+      name: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions-helm-eks-deploy
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Update kubeconfig
+        run: |
+          set -e
+          aws eks update-kubeconfig \
+            --name "${{ inputs.cluster_name }}" \
+            --region "${{ inputs.aws_region }}"
+
+      - name: Helm dependency update
+        working-directory: ${{ inputs.helm_chart_path }}
+        run: |
+          set -e
+          helm dependency update .
+
+      - name: Helm upgrade --install
+        env:
+          COGNITO_POOL: ${{ secrets.cognito_user_pool_id }}
+          COGNITO_CLIENT: ${{ secrets.cognito_user_pool_client_id }}
+        run: |
+          set -e
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          helm upgrade --install "${{ inputs.service_name }}" \
+            "${{ inputs.helm_chart_path }}" \
+            --namespace "${{ inputs.helm_namespace }}" \
+            --create-namespace \
+            --set "image.repository=${{ inputs.image_repository }}" \
+            --set "image.tag=${{ inputs.image_tag }}" \
+            --set "env.AWS_REGION=${{ inputs.aws_region }}" \
+            --set "env.AWS_ACCOUNT_ID=${ACCOUNT_ID}" \
+            --set "env.ENVIRONMENT=${{ inputs.environment }}" \
+            --set "env.TF_VAR_service_name=${{ inputs.service_name }}" \
+            --set "env.COGNITO_USER_POOL_ID=${COGNITO_POOL}" \
+            --set "env.COGNITO_USER_POOL_CLIENT_ID=${COGNITO_CLIENT}" \
+            --wait --timeout 10m
+          echo "✅ Helm deploy complete for ${{ inputs.service_name }}"

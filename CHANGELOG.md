@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - SVC API (EKS) deploy workflows
+- **`docker-build-push.yml`** — Dockerfile build → GHCR push
+- **`helm-eks-deploy.yml`** — Helm upgrade to EKS (`k8s/` chart)
+- **`svc-api-tf-deploy.yml`** — Docker → Helm → Terraform edge (API GW + VPC Link)
+- **`svc-api-cf-deploy.yml`** — Docker → Helm → CloudFormation edge (API GW + VPC Link)
+
 ### Added - Vue SPA deploy workflows
 - **`vue-static-deploy.yml`** — npm build → S3 sync → CloudFront invalidation
 - **`vue-cf-deploy.yml`** — CloudFormation (S3+CloudFront) then Vue static deploy
