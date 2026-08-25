@@ -19,7 +19,7 @@ on:
         type: string
       aws_region:
         description: "AWS region"
-        required: true
+        required: false
         type: string
         default: "us-east-2"
       cluster_name:
@@ -63,16 +63,22 @@ on:
         default: "ubuntu-latest"
     secrets:
       aws_role_arn:
+        description: "AWS IAM role ARN for OIDC"
         required: true
       aws_account_id:
+        description: "AWS Account ID"
         required: true
       gitlab_api_token:
+        description: "GitLab API token for private PyPI (cloudbot_core)"
         required: false
       cognito_user_pool_id:
+        description: "Cognito user pool ID for API Gateway authorizer"
         required: true
       cognito_user_pool_client_id:
+        description: "Cognito user pool client ID (optional)"
         required: false
       tf_state_bucket:
+        description: "Optional Terraform state bucket secret"
         required: false
 
 jobs:
@@ -160,6 +166,8 @@ jobs:
           helm upgrade --install "${{ inputs.service_name }}" k8s \
             --namespace "${{ inputs.helm_namespace }}" \
             --create-namespace \
+            --set "nameOverride=${{ inputs.service_name }}" \
+            --set "labels.app=${{ inputs.service_name }}" \
             --set "image.repository=${{ steps.meta.outputs.image_uri }}" \
             --set "image.tag=${{ steps.meta.outputs.image_tag }}" \
             --set "env.AWS_REGION=${{ inputs.aws_region }}" \
