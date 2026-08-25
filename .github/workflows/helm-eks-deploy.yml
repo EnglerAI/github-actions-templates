@@ -104,6 +104,8 @@ jobs:
             "${{ inputs.helm_chart_path }}" \
             --namespace "${{ inputs.helm_namespace }}" \
             --create-namespace \
+            --set "nameOverride=${{ inputs.service_name }}" \
+            --set "labels.app=${{ inputs.service_name }}" \
             --set "image.repository=${{ inputs.image_repository }}" \
             --set "image.tag=${{ inputs.image_tag }}" \
             --set "env.AWS_REGION=${{ inputs.aws_region }}" \
