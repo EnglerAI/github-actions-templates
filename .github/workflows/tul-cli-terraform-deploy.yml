@@ -1,0 +1,248 @@
+# Reusable workflow: package CLI zip → S3 → terraform plan/apply (SSM artifact URI)
+name: TUL CLI Terraform Deploy
+
+on:
+  workflow_call:
+    inputs:
+      cli_name:
+        description: "Name of CLI / codeitem"
+        required: true
+        type: string
+      environment:
+        description: "Target environment (dev/qat/stg/prd)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region"
+        required: true
+        type: string
+        default: "us-east-2"
+      python_version:
+        description: "Python version"
+        required: false
+        type: string
+        default: "3.12"
+      requirements_file:
+        description: "Path to requirements.txt"
+        required: false
+        type: string
+        default: "requirements.txt"
+      cli_package_directory:
+        description: "Directory containing CLI package (defaults to hello_cli)"
+        required: false
+        type: string
+        default: "hello_cli"
+      terraform_version:
+        description: "Terraform version"
+        required: false
+        type: string
+        default: "1.14.3"
+      terraform_directory:
+        description: "Terraform working directory"
+        required: false
+        type: string
+        default: "terraform"
+      state_bucket:
+        description: "S3 bucket for Terraform state (optional; vars preferred)."
+        required: false
+        type: string
+        default: ""
+      state_key:
+        description: "S3 key for Terraform state"
+        required: true
+        type: string
+      state_table:
+        description: "DynamoDB table for state locking"
+        required: false
+        type: string
+        default: ""
+      kms_key_alias:
+        description: "KMS key alias for S3 encryption of CLI package"
+        required: false
+        type: string
+        default: "alias/CloudBotPipelineKey"
+      runner:
+        description: "Runner label"
+        required: false
+        type: string
+        default: "ubuntu-latest"
+    secrets:
+      aws_role_arn:
+        description: "AWS IAM role ARN for OIDC"
+        required: true
+      aws_account_id:
+        description: "AWS Account ID"
+        required: true
+      tf_state_bucket:
+        description: "Optional TF state bucket (org/repo secret)."
+        required: false
+      gitlab_api_token:
+        description: "GitLab API token for private packages"
+        required: false
+
+jobs:
+  package:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Package CLI
+        run: |
+          set -e
+          echo "=== Packaging CLI ==="
+
+          CLI_DIR="${{ inputs.cli_package_directory }}"
+          if [ ! -d "${CLI_DIR}" ]; then
+            echo "❌ Error: '${CLI_DIR}' directory not found"
+            exit 1
+          fi
+
+          mkdir -p cli-package
+          cp -r "${CLI_DIR}" cli-package/
+
+          REQ_FILE="${{ inputs.requirements_file }}"
+          if [ -f "${CLI_DIR}/requirements.txt" ]; then
+            echo "Installing dependencies from ${CLI_DIR}/requirements.txt..."
+            if [ -n "${{ secrets.gitlab_api_token }}" ]; then
+              pip install \
+                --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
+                -r "${CLI_DIR}/requirements.txt" \
+                -t "cli-package/${CLI_DIR}/" || \
+              pip install -r "${CLI_DIR}/requirements.txt" -t "cli-package/${CLI_DIR}/"
+            else
+              pip install -r "${CLI_DIR}/requirements.txt" -t "cli-package/${CLI_DIR}/"
+            fi
+          elif [ -f "${REQ_FILE}" ]; then
+            echo "Installing dependencies from ${REQ_FILE}..."
+            if [ -n "${{ secrets.gitlab_api_token }}" ]; then
+              pip install \
+                --extra-index-url "https://__token__:${{ secrets.gitlab_api_token }}@gitlab.com/api/v4/projects/71621175/packages/pypi/simple" \
+                -r "${REQ_FILE}" \
+                -t "cli-package/${CLI_DIR}/" || \
+              pip install -r "${REQ_FILE}" -t "cli-package/${CLI_DIR}/"
+            else
+              pip install -r "${REQ_FILE}" -t "cli-package/${CLI_DIR}/"
+            fi
+          else
+            echo "No requirements.txt found, skipping dependency installation"
+          fi
+
+          (cd cli-package && zip -r ../cli.zip . -x "*.pyc" -x "*__pycache__*" -x "*.git*" -x "*.pytest_cache*")
+          ls -lh cli.zip
+          echo "✅ CLI package created"
+
+      - name: Upload CLI package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tul-cli-package-${{ inputs.environment }}
+          path: cli.zip
+          retention-days: 1
+
+  deploy:
+    needs: [package]
+    runs-on: ${{ inputs.runner }}
+    environment:
+      name: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download CLI package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tul-cli-package-${{ inputs.environment }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions-tul-cli-terraform-deploy
+
+      - name: Upload package to S3
+        id: upload
+        run: |
+          set -e
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${{ inputs.aws_region }}-${{ secrets.aws_account_id }}"
+          S3_KEY="cli-packages/${{ inputs.cli_name }}/cli-${{ github.sha }}.zip"
+
+          echo "Uploading cli.zip to s3://${ARTIFACTS_BUCKET}/${S3_KEY}"
+          aws s3 cp cli.zip "s3://${ARTIFACTS_BUCKET}/${S3_KEY}" \
+            --sse aws:kms \
+            --sse-kms-key-id ${{ inputs.kms_key_alias }} \
+            --region ${{ inputs.aws_region }}
+
+          echo "artifacts_bucket=${ARTIFACTS_BUCKET}" >> $GITHUB_OUTPUT
+          echo "s3_key=${S3_KEY}" >> $GITHUB_OUTPUT
+          echo "✅ Upload complete"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - name: Terraform Init
+        working-directory: ${{ inputs.terraform_directory }}
+        env:
+          INPUT_STATE_BUCKET: ${{ inputs.state_bucket }}
+          SECRET_STATE_BUCKET: ${{ secrets.tf_state_bucket }}
+          AWS_ACCOUNT_ID: ${{ secrets.aws_account_id }}
+          AWS_REGION_INPUT: ${{ inputs.aws_region }}
+          STATE_KEY: ${{ inputs.state_key }}
+          STATE_TABLE: ${{ inputs.state_table }}
+        run: |
+          set -e
+          STATE_BUCKET="${INPUT_STATE_BUCKET}"
+          if [ -z "${STATE_BUCKET}" ]; then
+            STATE_BUCKET="${SECRET_STATE_BUCKET}"
+          fi
+          if [ -z "${STATE_BUCKET}" ] && [ -n "${AWS_ACCOUNT_ID}" ]; then
+            STATE_BUCKET="cloudbot-terraform-state-${AWS_REGION_INPUT}-${AWS_ACCOUNT_ID}"
+            echo "Derived TF state bucket from aws_account_id"
+          fi
+          if [ -z "${STATE_BUCKET}" ]; then
+            echo "❌ Terraform state bucket is empty."
+            exit 1
+          fi
+          LOCK_ARGS="-backend-config=use_lockfile=true"
+          if [ -n "${STATE_TABLE}" ]; then
+            LOCK_ARGS="-backend-config=dynamodb_table=${STATE_TABLE}"
+          fi
+          # shellcheck disable=SC2086
+          terraform init \
+            -backend-config="bucket=${STATE_BUCKET}" \
+            -backend-config="key=${STATE_KEY}" \
+            -backend-config="region=${AWS_REGION_INPUT}" \
+            ${LOCK_ARGS} \
+            -backend-config="encrypt=true"
+
+      - name: Terraform Plan and Apply
+        working-directory: ${{ inputs.terraform_directory }}
+        env:
+          TF_VAR_artifacts_bucket: ${{ steps.upload.outputs.artifacts_bucket }}
+          TF_VAR_s3_key: ${{ steps.upload.outputs.s3_key }}
+          TF_VAR_cli_name: ${{ inputs.cli_name }}
+          TF_VAR_stage_name: ${{ inputs.environment }}
+          TF_VAR_aws_region: ${{ inputs.aws_region }}
+        run: |
+          set -e
+          terraform plan -no-color -out=tfplan
+          terraform apply -auto-approve tfplan
+          terraform output -json > outputs.json
+          cat outputs.json
+
+      - name: Upload terraform outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs-${{ inputs.environment }}
+          path: ${{ inputs.terraform_directory }}/outputs.json
+          retention-days: 30
