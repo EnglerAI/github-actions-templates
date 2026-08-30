@@ -40,6 +40,16 @@ on:
         required: false
         type: boolean
         default: false
+      inf_cmp_con_tf_vars:
+        description: "Resolve TF_VAR_cluster_name/vpc_id from env-specific secrets (INF CMP CON)"
+        required: false
+        type: boolean
+        default: false
+      cluster_name_fallback:
+        description: "Fallback cluster name when env TF_VAR_CLUSTER_NAME_* secret is unset"
+        required: false
+        type: string
+        default: ""
     secrets:
       aws_role_arn:
         description: "AWS IAM role ARN for OIDC"
@@ -49,6 +59,30 @@ on:
         required: false
       tf_state_bucket:
         description: "Optional TF state bucket secret when inputs.state_bucket is empty"
+        required: false
+      tf_var_cluster_name_dev:
+        description: "Repository secret TF_VAR_CLUSTER_NAME_DEV"
+        required: false
+      tf_var_cluster_name_qat:
+        description: "Repository secret TF_VAR_CLUSTER_NAME_QAT"
+        required: false
+      tf_var_cluster_name_stg:
+        description: "Repository secret TF_VAR_CLUSTER_NAME_STG"
+        required: false
+      tf_var_cluster_name_prd:
+        description: "Repository secret TF_VAR_CLUSTER_NAME_PRD"
+        required: false
+      tf_var_vpc_id_dev:
+        description: "Repository secret VPC_ID_DEV"
+        required: false
+      tf_var_vpc_id_qat:
+        description: "Repository secret VPC_ID_QAT"
+        required: false
+      tf_var_vpc_id_stg:
+        description: "Repository secret VPC_ID_STG"
+        required: false
+      tf_var_vpc_id_prd:
+        description: "Repository secret VPC_ID_PRD"
         required: false
 
 jobs:
@@ -171,6 +205,23 @@ jobs:
             -backend-config="region=${AWS_REGION_INPUT}" \
             -backend-config="use_lockfile=true" \
             -backend-config="encrypt=true"
+
+      - name: Resolve INF CMP CON Terraform variables
+        if: inputs.inf_cmp_con_tf_vars
+        uses: EnglerAI/github-actions-templates/.github/actions/resolve-inf-cmp-con-tf-env@main
+        with:
+          environment: ${{ inputs.environment }}
+          aws_region: ${{ inputs.aws_region }}
+          cluster_name_fallback: ${{ inputs.cluster_name_fallback != '' && inputs.cluster_name_fallback || github.event.repository.name }}
+        secrets:
+          tf_var_cluster_name_dev: ${{ secrets.tf_var_cluster_name_dev }}
+          tf_var_cluster_name_qat: ${{ secrets.tf_var_cluster_name_qat }}
+          tf_var_cluster_name_stg: ${{ secrets.tf_var_cluster_name_stg }}
+          tf_var_cluster_name_prd: ${{ secrets.tf_var_cluster_name_prd }}
+          tf_var_vpc_id_dev: ${{ secrets.tf_var_vpc_id_dev }}
+          tf_var_vpc_id_qat: ${{ secrets.tf_var_vpc_id_qat }}
+          tf_var_vpc_id_stg: ${{ secrets.tf_var_vpc_id_stg }}
+          tf_var_vpc_id_prd: ${{ secrets.tf_var_vpc_id_prd }}
 
       - name: Terraform Plan
         id: plan
@@ -299,6 +350,23 @@ jobs:
             -backend-config="use_lockfile=true" \
             -backend-config="encrypt=true"
 
+      - name: Resolve INF CMP CON Terraform variables
+        if: inputs.inf_cmp_con_tf_vars
+        uses: EnglerAI/github-actions-templates/.github/actions/resolve-inf-cmp-con-tf-env@main
+        with:
+          environment: ${{ inputs.environment }}
+          aws_region: ${{ inputs.aws_region }}
+          cluster_name_fallback: ${{ inputs.cluster_name_fallback != '' && inputs.cluster_name_fallback || github.event.repository.name }}
+        secrets:
+          tf_var_cluster_name_dev: ${{ secrets.tf_var_cluster_name_dev }}
+          tf_var_cluster_name_qat: ${{ secrets.tf_var_cluster_name_qat }}
+          tf_var_cluster_name_stg: ${{ secrets.tf_var_cluster_name_stg }}
+          tf_var_cluster_name_prd: ${{ secrets.tf_var_cluster_name_prd }}
+          tf_var_vpc_id_dev: ${{ secrets.tf_var_vpc_id_dev }}
+          tf_var_vpc_id_qat: ${{ secrets.tf_var_vpc_id_qat }}
+          tf_var_vpc_id_stg: ${{ secrets.tf_var_vpc_id_stg }}
+          tf_var_vpc_id_prd: ${{ secrets.tf_var_vpc_id_prd }}
+
       - name: Terraform Plan
         id: plan
         working-directory: ${{ inputs.terraform_directory }}
@@ -393,6 +461,23 @@ jobs:
             -backend-config="region=${AWS_REGION_INPUT}" \
             -backend-config="use_lockfile=true" \
             -backend-config="encrypt=true"
+
+      - name: Resolve INF CMP CON Terraform variables
+        if: inputs.inf_cmp_con_tf_vars
+        uses: EnglerAI/github-actions-templates/.github/actions/resolve-inf-cmp-con-tf-env@main
+        with:
+          environment: ${{ inputs.environment }}
+          aws_region: ${{ inputs.aws_region }}
+          cluster_name_fallback: ${{ inputs.cluster_name_fallback != '' && inputs.cluster_name_fallback || github.event.repository.name }}
+        secrets:
+          tf_var_cluster_name_dev: ${{ secrets.tf_var_cluster_name_dev }}
+          tf_var_cluster_name_qat: ${{ secrets.tf_var_cluster_name_qat }}
+          tf_var_cluster_name_stg: ${{ secrets.tf_var_cluster_name_stg }}
+          tf_var_cluster_name_prd: ${{ secrets.tf_var_cluster_name_prd }}
+          tf_var_vpc_id_dev: ${{ secrets.tf_var_vpc_id_dev }}
+          tf_var_vpc_id_qat: ${{ secrets.tf_var_vpc_id_qat }}
+          tf_var_vpc_id_stg: ${{ secrets.tf_var_vpc_id_stg }}
+          tf_var_vpc_id_prd: ${{ secrets.tf_var_vpc_id_prd }}
 
       - name: Refresh State
         working-directory: ${{ inputs.terraform_directory }}

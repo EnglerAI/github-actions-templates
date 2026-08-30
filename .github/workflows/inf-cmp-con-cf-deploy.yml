@@ -49,14 +49,38 @@ on:
       accountid:
         description: "CloudBot Account ID (ACCOUNTID parameter)"
         required: false
+      tf_var_cluster_name_dev:
+        description: "Repository secret TF_VAR_CLUSTER_NAME_DEV"
+        required: false
+      tf_var_cluster_name_qat:
+        description: "Repository secret TF_VAR_CLUSTER_NAME_QAT"
+        required: false
+      tf_var_cluster_name_stg:
+        description: "Repository secret TF_VAR_CLUSTER_NAME_STG"
+        required: false
+      tf_var_cluster_name_prd:
+        description: "Repository secret TF_VAR_CLUSTER_NAME_PRD"
+        required: false
       vpc_id_dev:
         description: "Existing VPC ID for DEV"
+        required: false
+      vpc_id_qat:
+        description: "Existing VPC ID for QAT"
+        required: false
+      vpc_id_stg:
+        description: "Existing VPC ID for STG"
         required: false
       vpc_id_prd:
         description: "Existing VPC ID for PRD"
         required: false
       vpc_cidr_dev:
         description: "VPC CIDR for DEV (default 10.0.0.0/16)"
+        required: false
+      vpc_cidr_qat:
+        description: "VPC CIDR for QAT (default 10.0.0.0/16)"
+        required: false
+      vpc_cidr_stg:
+        description: "VPC CIDR for STG (default 10.0.0.0/16)"
         required: false
       vpc_cidr_prd:
         description: "VPC CIDR for PRD (default 10.0.0.0/16)"
@@ -118,6 +142,37 @@ jobs:
           TEMPLATE_FILE="${{ inputs.template_file }}"
           ENV="${{ inputs.environment }}"
           CLUSTER_NAME="${{ inputs.cluster_name }}"
+
+          case "${ENV}" in
+            dev)
+              CLUSTER_NAME="${{ secrets.tf_var_cluster_name_dev }}"
+              VPC_ID="${{ secrets.vpc_id_dev }}"
+              VPC_CIDR="${{ secrets.vpc_cidr_dev }}"
+              ;;
+            qat)
+              CLUSTER_NAME="${{ secrets.tf_var_cluster_name_qat }}"
+              VPC_ID="${{ secrets.vpc_id_qat }}"
+              VPC_CIDR="${{ secrets.vpc_cidr_qat }}"
+              ;;
+            stg)
+              CLUSTER_NAME="${{ secrets.tf_var_cluster_name_stg }}"
+              VPC_ID="${{ secrets.vpc_id_stg }}"
+              VPC_CIDR="${{ secrets.vpc_cidr_stg }}"
+              ;;
+            prd)
+              CLUSTER_NAME="${{ secrets.tf_var_cluster_name_prd }}"
+              VPC_ID="${{ secrets.vpc_id_prd }}"
+              VPC_CIDR="${{ secrets.vpc_cidr_prd }}"
+              ;;
+            *)
+              VPC_ID=""
+              VPC_CIDR=""
+              ;;
+          esac
+
+          if [ -z "${CLUSTER_NAME}" ]; then
+            CLUSTER_NAME="${{ inputs.cluster_name }}"
+          fi
           if [ -z "${CLUSTER_NAME}" ]; then
             CLUSTER_NAME="${{ github.event.repository.name }}"
           fi
@@ -127,22 +182,12 @@ jobs:
             exit 1
           fi
 
-          # Select VPC_ID / VPC_CIDR by environment (same pattern as SECURITY_GROUP_ID)
-          if [ "${ENV}" = "dev" ] || [ "${ENV}" = "qat" ]; then
-            VPC_ID="${{ secrets.vpc_id_dev }}"
-            VPC_CIDR="${{ secrets.vpc_cidr_dev }}"
-          elif [ "${ENV}" = "prd" ] || [ "${ENV}" = "stg" ]; then
-            VPC_ID="${{ secrets.vpc_id_prd }}"
-            VPC_CIDR="${{ secrets.vpc_cidr_prd }}"
-          else
-            VPC_ID=""
-            VPC_CIDR=""
-          fi
+          # Select VPC_ID / VPC_CIDR by environment
           VPC_CIDR="${VPC_CIDR:-10.0.0.0/16}"
 
           if [ -z "${VPC_ID}" ]; then
             echo "❌ Error: VPC_ID is required for INF CMP CON CF deploy"
-            echo "   Set repository secret VPC_ID_DEV (env/dev) or VPC_ID_PRD (main)"
+            echo "   Set repository secret VPC_ID_DEV / VPC_ID_QAT / VPC_ID_STG / VPC_ID_PRD"
             exit 1
           fi
 
