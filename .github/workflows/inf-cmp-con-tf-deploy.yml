@@ -49,11 +49,12 @@ on:
 jobs:
   deploy:
     # Nested reusable workflows inherit only the permissions granted here.
-    # terraform-workflow.yml comments on PRs (validate/plan), so pull-requests: write is required.
+    # terraform-workflow.yml: PR comments (pull-requests) + drift issues (issues).
     permissions:
       id-token: write
       contents: read
       pull-requests: write
+      issues: write
     uses: EnglerAI/github-actions-templates/.github/workflows/terraform-workflow.yml@main
     with:
       environment: ${{ inputs.environment }}
