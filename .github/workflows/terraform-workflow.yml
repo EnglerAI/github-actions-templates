@@ -44,6 +44,12 @@ on:
       aws_role_arn:
         description: "AWS IAM role ARN for OIDC"
         required: true
+      aws_account_id:
+        description: "AWS account ID (fallback for default state bucket name)"
+        required: false
+      tf_state_bucket:
+        description: "Optional TF state bucket secret when inputs.state_bucket is empty"
+        required: false
 
 jobs:
   validate:
@@ -132,12 +138,37 @@ jobs:
 
       - name: Terraform Init
         working-directory: ${{ inputs.terraform_directory }}
+        env:
+          INPUT_STATE_BUCKET: ${{ inputs.state_bucket }}
+          SECRET_STATE_BUCKET: ${{ secrets.tf_state_bucket }}
+          AWS_ACCOUNT_ID: ${{ secrets.aws_account_id }}
+          AWS_REGION_INPUT: ${{ inputs.aws_region }}
+          STATE_KEY: ${{ inputs.state_key }}
         run: |
+          set -e
+          STATE_BUCKET="${INPUT_STATE_BUCKET}"
+          if [ -z "${STATE_BUCKET}" ]; then
+            STATE_BUCKET="${SECRET_STATE_BUCKET}"
+          fi
+          if [ -z "${STATE_BUCKET}" ] && [ -n "${AWS_ACCOUNT_ID}" ]; then
+            STATE_BUCKET="cloudbot-terraform-state-${AWS_REGION_INPUT}-${AWS_ACCOUNT_ID}"
+          fi
+          if [ -z "${STATE_BUCKET}" ]; then
+            echo "❌ Terraform state bucket is empty."
+            echo "Set vars.TF_STATE_BUCKET_* or secrets.TF_STATE_BUCKET_* or AWS_ACCOUNT_ID_*"
+            exit 1
+          fi
+          if [ -z "${STATE_KEY}" ]; then
+            echo "❌ Terraform state key is empty."
+            exit 1
+          fi
+          echo "State bucket: ${STATE_BUCKET}"
+          echo "State key: ${STATE_KEY}"
           terraform init \
-            -backend-config="bucket=${{ inputs.state_bucket }}" \
-            -backend-config="key=${{ inputs.state_key }}" \
-            -backend-config="region=${{ inputs.aws_region }}" \
-            ${{ inputs.state_table != '' && format('-backend-config="dynamodb_table={0}"', inputs.state_table) || '' }} \
+            -backend-config="bucket=${STATE_BUCKET}" \
+            -backend-config="key=${STATE_KEY}" \
+            -backend-config="region=${AWS_REGION_INPUT}" \
+            -backend-config="use_lockfile=true" \
             -backend-config="encrypt=true"
 
       - name: Terraform Plan
@@ -234,12 +265,37 @@ jobs:
 
       - name: Terraform Init
         working-directory: ${{ inputs.terraform_directory }}
+        env:
+          INPUT_STATE_BUCKET: ${{ inputs.state_bucket }}
+          SECRET_STATE_BUCKET: ${{ secrets.tf_state_bucket }}
+          AWS_ACCOUNT_ID: ${{ secrets.aws_account_id }}
+          AWS_REGION_INPUT: ${{ inputs.aws_region }}
+          STATE_KEY: ${{ inputs.state_key }}
         run: |
+          set -e
+          STATE_BUCKET="${INPUT_STATE_BUCKET}"
+          if [ -z "${STATE_BUCKET}" ]; then
+            STATE_BUCKET="${SECRET_STATE_BUCKET}"
+          fi
+          if [ -z "${STATE_BUCKET}" ] && [ -n "${AWS_ACCOUNT_ID}" ]; then
+            STATE_BUCKET="cloudbot-terraform-state-${AWS_REGION_INPUT}-${AWS_ACCOUNT_ID}"
+          fi
+          if [ -z "${STATE_BUCKET}" ]; then
+            echo "❌ Terraform state bucket is empty."
+            echo "Set vars.TF_STATE_BUCKET_* or secrets.TF_STATE_BUCKET_* or AWS_ACCOUNT_ID_*"
+            exit 1
+          fi
+          if [ -z "${STATE_KEY}" ]; then
+            echo "❌ Terraform state key is empty."
+            exit 1
+          fi
+          echo "State bucket: ${STATE_BUCKET}"
+          echo "State key: ${STATE_KEY}"
           terraform init \
-            -backend-config="bucket=${{ inputs.state_bucket }}" \
-            -backend-config="key=${{ inputs.state_key }}" \
-            -backend-config="region=${{ inputs.aws_region }}" \
-            ${{ inputs.state_table != '' && format('-backend-config="dynamodb_table={0}"', inputs.state_table) || '' }} \
+            -backend-config="bucket=${STATE_BUCKET}" \
+            -backend-config="key=${STATE_KEY}" \
+            -backend-config="region=${AWS_REGION_INPUT}" \
+            -backend-config="use_lockfile=true" \
             -backend-config="encrypt=true"
 
       - name: Terraform Plan
@@ -304,12 +360,37 @@ jobs:
 
       - name: Terraform Init
         working-directory: ${{ inputs.terraform_directory }}
+        env:
+          INPUT_STATE_BUCKET: ${{ inputs.state_bucket }}
+          SECRET_STATE_BUCKET: ${{ secrets.tf_state_bucket }}
+          AWS_ACCOUNT_ID: ${{ secrets.aws_account_id }}
+          AWS_REGION_INPUT: ${{ inputs.aws_region }}
+          STATE_KEY: ${{ inputs.state_key }}
         run: |
+          set -e
+          STATE_BUCKET="${INPUT_STATE_BUCKET}"
+          if [ -z "${STATE_BUCKET}" ]; then
+            STATE_BUCKET="${SECRET_STATE_BUCKET}"
+          fi
+          if [ -z "${STATE_BUCKET}" ] && [ -n "${AWS_ACCOUNT_ID}" ]; then
+            STATE_BUCKET="cloudbot-terraform-state-${AWS_REGION_INPUT}-${AWS_ACCOUNT_ID}"
+          fi
+          if [ -z "${STATE_BUCKET}" ]; then
+            echo "❌ Terraform state bucket is empty."
+            echo "Set vars.TF_STATE_BUCKET_* or secrets.TF_STATE_BUCKET_* or AWS_ACCOUNT_ID_*"
+            exit 1
+          fi
+          if [ -z "${STATE_KEY}" ]; then
+            echo "❌ Terraform state key is empty."
+            exit 1
+          fi
+          echo "State bucket: ${STATE_BUCKET}"
+          echo "State key: ${STATE_KEY}"
           terraform init \
-            -backend-config="bucket=${{ inputs.state_bucket }}" \
-            -backend-config="key=${{ inputs.state_key }}" \
-            -backend-config="region=${{ inputs.aws_region }}" \
-            ${{ inputs.state_table != '' && format('-backend-config="dynamodb_table={0}"', inputs.state_table) || '' }} \
+            -backend-config="bucket=${STATE_BUCKET}" \
+            -backend-config="key=${STATE_KEY}" \
+            -backend-config="region=${AWS_REGION_INPUT}" \
+            -backend-config="use_lockfile=true" \
             -backend-config="encrypt=true"
 
       - name: Refresh State
