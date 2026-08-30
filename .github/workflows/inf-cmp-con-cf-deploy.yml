@@ -1,4 +1,6 @@
 # Reusable workflow: CloudFormation deploy for INF > CMP > CON base infrastructure
+# Passes ClusterName, VpcId, VpcCidr, Environment, ACCOUNTID, NAME — selecting
+# VPC_ID/VPC_CIDR from env-specific secrets (same pattern as SECURITY_GROUP_ID).
 name: INF CMP CON CloudFormation Deploy
 
 on:
@@ -8,6 +10,11 @@ on:
         description: "CloudFormation stack name"
         required: true
         type: string
+      cluster_name:
+        description: "Cluster / codeitem name prefix (ClusterName + NAME params)"
+        required: false
+        type: string
+        default: ""
       environment:
         description: "Target environment (dev/qat/stg/prd)"
         required: true
@@ -42,18 +49,140 @@ on:
       accountid:
         description: "CloudBot Account ID (ACCOUNTID parameter)"
         required: false
+      vpc_id_dev:
+        description: "Existing VPC ID for DEV"
+        required: false
+      vpc_id_prd:
+        description: "Existing VPC ID for PRD"
+        required: false
+      vpc_cidr_dev:
+        description: "VPC CIDR for DEV (default 10.0.0.0/16)"
+        required: false
+      vpc_cidr_prd:
+        description: "VPC CIDR for PRD (default 10.0.0.0/16)"
+        required: false
 
 jobs:
   deploy:
-    uses: EnglerAI/github-actions-templates/.github/workflows/cloudformation-deploy.yml@main
-    with:
-      stack_name: ${{ inputs.stack_name }}
-      environment: ${{ inputs.environment }}
-      aws_region: ${{ inputs.aws_region }}
-      template_file: ${{ inputs.template_file }}
-      capabilities: ${{ inputs.capabilities }}
-      runner: ${{ inputs.runner }}
-    secrets:
-      aws_role_arn: ${{ secrets.aws_role_arn }}
-      aws_account_id: ${{ secrets.aws_account_id }}
-      accountid: ${{ secrets.accountid }}
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    environment:
+      name: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      HOME: ${{ github.workspace }}/.home
+
+    steps:
+      - name: Setup Git
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-git-self-hosted@main
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions-inf-cmp-con-cf-deploy
+
+      - name: Install AWS CLI
+        uses: EnglerAI/github-actions-templates/.github/actions/install-aws-cli@main
+
+      - name: Setup AWS Path
+        uses: EnglerAI/github-actions-templates/.github/actions/setup-aws-path@main
+
+      - name: Verify AWS Identity and Account
+        run: |
+          echo "=== AWS Identity Verification ==="
+          IDENTITY=$(aws sts get-caller-identity)
+          echo "$IDENTITY"
+          ACTUAL_ACCOUNT=$(echo "$IDENTITY" | jq -r .Account)
+
+          if [ "${ACTUAL_ACCOUNT}" != "${{ secrets.aws_account_id }}" ]; then
+            echo "❌ ERROR: Account mismatch — expected ${{ secrets.aws_account_id }}, got ${ACTUAL_ACCOUNT}"
+            exit 1
+          fi
+          echo "✅ Authenticated to correct account: ${{ inputs.environment }}"
+
+      - name: Install SAM CLI
+        uses: EnglerAI/github-actions-templates/.github/actions/install-sam-cli@main
+
+      - name: Deploy INF CMP CON CloudFormation
+        run: |
+          set -e
+          echo "=== INF CMP CON CF Deploy ==="
+
+          STACK_NAME="${{ inputs.stack_name }}"
+          TEMPLATE_FILE="${{ inputs.template_file }}"
+          ENV="${{ inputs.environment }}"
+          CLUSTER_NAME="${{ inputs.cluster_name }}"
+          if [ -z "${CLUSTER_NAME}" ]; then
+            CLUSTER_NAME="${{ github.event.repository.name }}"
+          fi
+
+          if [ ! -f "${TEMPLATE_FILE}" ]; then
+            echo "❌ Error: Template file not found: ${TEMPLATE_FILE}"
+            exit 1
+          fi
+
+          # Select VPC_ID / VPC_CIDR by environment (same pattern as SECURITY_GROUP_ID)
+          if [ "${ENV}" = "dev" ] || [ "${ENV}" = "qat" ]; then
+            VPC_ID="${{ secrets.vpc_id_dev }}"
+            VPC_CIDR="${{ secrets.vpc_cidr_dev }}"
+          elif [ "${ENV}" = "prd" ] || [ "${ENV}" = "stg" ]; then
+            VPC_ID="${{ secrets.vpc_id_prd }}"
+            VPC_CIDR="${{ secrets.vpc_cidr_prd }}"
+          else
+            VPC_ID=""
+            VPC_CIDR=""
+          fi
+          VPC_CIDR="${VPC_CIDR:-10.0.0.0/16}"
+
+          if [ -z "${VPC_ID}" ]; then
+            echo "❌ Error: VPC_ID is required for INF CMP CON CF deploy"
+            echo "   Set repository secret VPC_ID_DEV (env/dev) or VPC_ID_PRD (main)"
+            exit 1
+          fi
+
+          if [ -n "${{ secrets.accountid }}" ]; then
+            ACCOUNTID="${{ secrets.accountid }}"
+          else
+            ACCOUNTID="${{ secrets.aws_account_id }}"
+          fi
+
+          PARAM_OVERRIDES="ClusterName=${CLUSTER_NAME} VpcId=${VPC_ID} VpcCidr=${VPC_CIDR} Environment=${ENV} ACCOUNTID=${ACCOUNTID} NAME=${CLUSTER_NAME}"
+
+          CAPABILITIES="${{ inputs.capabilities }}"
+          CAPABILITY_ARGS=""
+          IFS=',' read -ra CAP_ARRAY <<< "${CAPABILITIES}"
+          for cap in "${CAP_ARRAY[@]}"; do
+            CAPABILITY_ARGS="${CAPABILITY_ARGS} --capabilities ${cap}"
+          done
+
+          echo "Stack: ${STACK_NAME}"
+          echo "Template: ${TEMPLATE_FILE}"
+          echo "Environment: ${ENV}"
+          echo "ClusterName: ${CLUSTER_NAME}"
+          echo "VpcId: ${VPC_ID}"
+          echo "VpcCidr: ${VPC_CIDR}"
+
+          sam deploy \
+            --template-file "${TEMPLATE_FILE}" \
+            --stack-name "${STACK_NAME}" \
+            --parameter-overrides ${PARAM_OVERRIDES} \
+            ${CAPABILITY_ARGS} \
+            --no-fail-on-empty-changeset \
+            --region "${{ inputs.aws_region }}"
+
+          echo "✅ INF CMP CON CF deploy completed"
+
+      - name: Get stack info
+        run: |
+          echo "=== CloudFormation Stack Info ==="
+          aws cloudformation describe-stacks \
+            --stack-name "${{ inputs.stack_name }}" \
+            --region "${{ inputs.aws_region }}" \
+            --query 'Stacks[0].{Status:StackStatus,Outputs:Outputs}' \
+            --output table
