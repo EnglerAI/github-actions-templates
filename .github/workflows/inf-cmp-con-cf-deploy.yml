@@ -1,0 +1,59 @@
+# Reusable workflow: CloudFormation deploy for INF > CMP > CON base infrastructure
+name: INF CMP CON CloudFormation Deploy
+
+on:
+  workflow_call:
+    inputs:
+      stack_name:
+        description: "CloudFormation stack name"
+        required: true
+        type: string
+      environment:
+        description: "Target environment (dev/qat/stg/prd)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region"
+        required: true
+        type: string
+        default: "us-east-2"
+      template_file:
+        description: "Path to CloudFormation template"
+        required: false
+        type: string
+        default: "template.yml"
+      capabilities:
+        description: "CloudFormation capabilities"
+        required: false
+        type: string
+        default: "CAPABILITY_NAMED_IAM"
+      runner:
+        description: "Runner label"
+        required: false
+        type: string
+        default: "ubuntu-latest"
+    secrets:
+      aws_role_arn:
+        description: "AWS IAM role ARN for OIDC"
+        required: true
+      aws_account_id:
+        description: "AWS Account ID"
+        required: true
+      accountid:
+        description: "CloudBot Account ID (ACCOUNTID parameter)"
+        required: false
+
+jobs:
+  deploy:
+    uses: EnglerAI/github-actions-templates/.github/workflows/cloudformation-deploy.yml@main
+    with:
+      stack_name: ${{ inputs.stack_name }}
+      environment: ${{ inputs.environment }}
+      aws_region: ${{ inputs.aws_region }}
+      template_file: ${{ inputs.template_file }}
+      capabilities: ${{ inputs.capabilities }}
+      runner: ${{ inputs.runner }}
+    secrets:
+      aws_role_arn: ${{ secrets.aws_role_arn }}
+      aws_account_id: ${{ secrets.aws_account_id }}
+      accountid: ${{ secrets.accountid }}
