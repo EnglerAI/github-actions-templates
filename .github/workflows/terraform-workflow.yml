@@ -208,20 +208,60 @@ jobs:
 
       - name: Resolve INF CMP CON Terraform variables
         if: inputs.inf_cmp_con_tf_vars
-        uses: EnglerAI/github-actions-templates/.github/actions/resolve-inf-cmp-con-tf-env@main
-        with:
-          environment: ${{ inputs.environment }}
-          aws_region: ${{ inputs.aws_region }}
-          cluster_name_fallback: ${{ inputs.cluster_name_fallback != '' && inputs.cluster_name_fallback || github.event.repository.name }}
-        secrets:
-          tf_var_cluster_name_dev: ${{ secrets.tf_var_cluster_name_dev }}
-          tf_var_cluster_name_qat: ${{ secrets.tf_var_cluster_name_qat }}
-          tf_var_cluster_name_stg: ${{ secrets.tf_var_cluster_name_stg }}
-          tf_var_cluster_name_prd: ${{ secrets.tf_var_cluster_name_prd }}
-          tf_var_vpc_id_dev: ${{ secrets.tf_var_vpc_id_dev }}
-          tf_var_vpc_id_qat: ${{ secrets.tf_var_vpc_id_qat }}
-          tf_var_vpc_id_stg: ${{ secrets.tf_var_vpc_id_stg }}
-          tf_var_vpc_id_prd: ${{ secrets.tf_var_vpc_id_prd }}
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          CLUSTER_FALLBACK: ${{ inputs.cluster_name_fallback != '' && inputs.cluster_name_fallback || github.event.repository.name }}
+          AWS_REGION: ${{ inputs.aws_region }}
+          CLUSTER_DEV: ${{ secrets.tf_var_cluster_name_dev }}
+          CLUSTER_QAT: ${{ secrets.tf_var_cluster_name_qat }}
+          CLUSTER_STG: ${{ secrets.tf_var_cluster_name_stg }}
+          CLUSTER_PRD: ${{ secrets.tf_var_cluster_name_prd }}
+          VPC_DEV: ${{ secrets.tf_var_vpc_id_dev }}
+          VPC_QAT: ${{ secrets.tf_var_vpc_id_qat }}
+          VPC_STG: ${{ secrets.tf_var_vpc_id_stg }}
+          VPC_PRD: ${{ secrets.tf_var_vpc_id_prd }}
+        run: |
+          set -e
+          case "${ENVIRONMENT}" in
+            dev)
+              TF_VAR_cluster_name="${CLUSTER_DEV}"
+              TF_VAR_vpc_id="${VPC_DEV}"
+              ;;
+            qat)
+              TF_VAR_cluster_name="${CLUSTER_QAT}"
+              TF_VAR_vpc_id="${VPC_QAT}"
+              ;;
+            stg)
+              TF_VAR_cluster_name="${CLUSTER_STG}"
+              TF_VAR_vpc_id="${VPC_STG}"
+              ;;
+            prd)
+              TF_VAR_cluster_name="${CLUSTER_PRD}"
+              TF_VAR_vpc_id="${VPC_PRD}"
+              ;;
+            *)
+              echo "❌ Unknown environment for INF CMP CON TF vars: ${ENVIRONMENT}"
+              exit 1
+              ;;
+          esac
+          if [ -z "${TF_VAR_cluster_name}" ] && [ -n "${CLUSTER_FALLBACK}" ]; then
+            TF_VAR_cluster_name="${CLUSTER_FALLBACK}"
+          fi
+          if [ -z "${TF_VAR_cluster_name}" ]; then
+            echo "❌ TF_VAR_cluster_name is required."
+            echo "   Set TF_VAR_CLUSTER_NAME_<ENV> or cluster_name_fallback."
+            exit 1
+          fi
+          if [ -z "${TF_VAR_vpc_id}" ]; then
+            echo "❌ TF_VAR_vpc_id is required."
+            echo "   Set VPC_ID_<ENV> repository secret."
+            exit 1
+          fi
+          echo "TF_VAR_cluster_name=${TF_VAR_cluster_name}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_vpc_id=${TF_VAR_vpc_id}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_environment=${ENVIRONMENT}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_aws_region=${AWS_REGION}" >> "${GITHUB_ENV}"
+          echo "INF CMP CON TF vars: cluster_name=${TF_VAR_cluster_name} environment=${ENVIRONMENT}"
 
       - name: Terraform Plan
         id: plan
@@ -352,20 +392,60 @@ jobs:
 
       - name: Resolve INF CMP CON Terraform variables
         if: inputs.inf_cmp_con_tf_vars
-        uses: EnglerAI/github-actions-templates/.github/actions/resolve-inf-cmp-con-tf-env@main
-        with:
-          environment: ${{ inputs.environment }}
-          aws_region: ${{ inputs.aws_region }}
-          cluster_name_fallback: ${{ inputs.cluster_name_fallback != '' && inputs.cluster_name_fallback || github.event.repository.name }}
-        secrets:
-          tf_var_cluster_name_dev: ${{ secrets.tf_var_cluster_name_dev }}
-          tf_var_cluster_name_qat: ${{ secrets.tf_var_cluster_name_qat }}
-          tf_var_cluster_name_stg: ${{ secrets.tf_var_cluster_name_stg }}
-          tf_var_cluster_name_prd: ${{ secrets.tf_var_cluster_name_prd }}
-          tf_var_vpc_id_dev: ${{ secrets.tf_var_vpc_id_dev }}
-          tf_var_vpc_id_qat: ${{ secrets.tf_var_vpc_id_qat }}
-          tf_var_vpc_id_stg: ${{ secrets.tf_var_vpc_id_stg }}
-          tf_var_vpc_id_prd: ${{ secrets.tf_var_vpc_id_prd }}
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          CLUSTER_FALLBACK: ${{ inputs.cluster_name_fallback != '' && inputs.cluster_name_fallback || github.event.repository.name }}
+          AWS_REGION: ${{ inputs.aws_region }}
+          CLUSTER_DEV: ${{ secrets.tf_var_cluster_name_dev }}
+          CLUSTER_QAT: ${{ secrets.tf_var_cluster_name_qat }}
+          CLUSTER_STG: ${{ secrets.tf_var_cluster_name_stg }}
+          CLUSTER_PRD: ${{ secrets.tf_var_cluster_name_prd }}
+          VPC_DEV: ${{ secrets.tf_var_vpc_id_dev }}
+          VPC_QAT: ${{ secrets.tf_var_vpc_id_qat }}
+          VPC_STG: ${{ secrets.tf_var_vpc_id_stg }}
+          VPC_PRD: ${{ secrets.tf_var_vpc_id_prd }}
+        run: |
+          set -e
+          case "${ENVIRONMENT}" in
+            dev)
+              TF_VAR_cluster_name="${CLUSTER_DEV}"
+              TF_VAR_vpc_id="${VPC_DEV}"
+              ;;
+            qat)
+              TF_VAR_cluster_name="${CLUSTER_QAT}"
+              TF_VAR_vpc_id="${VPC_QAT}"
+              ;;
+            stg)
+              TF_VAR_cluster_name="${CLUSTER_STG}"
+              TF_VAR_vpc_id="${VPC_STG}"
+              ;;
+            prd)
+              TF_VAR_cluster_name="${CLUSTER_PRD}"
+              TF_VAR_vpc_id="${VPC_PRD}"
+              ;;
+            *)
+              echo "❌ Unknown environment for INF CMP CON TF vars: ${ENVIRONMENT}"
+              exit 1
+              ;;
+          esac
+          if [ -z "${TF_VAR_cluster_name}" ] && [ -n "${CLUSTER_FALLBACK}" ]; then
+            TF_VAR_cluster_name="${CLUSTER_FALLBACK}"
+          fi
+          if [ -z "${TF_VAR_cluster_name}" ]; then
+            echo "❌ TF_VAR_cluster_name is required."
+            echo "   Set TF_VAR_CLUSTER_NAME_<ENV> or cluster_name_fallback."
+            exit 1
+          fi
+          if [ -z "${TF_VAR_vpc_id}" ]; then
+            echo "❌ TF_VAR_vpc_id is required."
+            echo "   Set VPC_ID_<ENV> repository secret."
+            exit 1
+          fi
+          echo "TF_VAR_cluster_name=${TF_VAR_cluster_name}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_vpc_id=${TF_VAR_vpc_id}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_environment=${ENVIRONMENT}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_aws_region=${AWS_REGION}" >> "${GITHUB_ENV}"
+          echo "INF CMP CON TF vars: cluster_name=${TF_VAR_cluster_name} environment=${ENVIRONMENT}"
 
       - name: Terraform Plan
         id: plan
@@ -464,20 +544,60 @@ jobs:
 
       - name: Resolve INF CMP CON Terraform variables
         if: inputs.inf_cmp_con_tf_vars
-        uses: EnglerAI/github-actions-templates/.github/actions/resolve-inf-cmp-con-tf-env@main
-        with:
-          environment: ${{ inputs.environment }}
-          aws_region: ${{ inputs.aws_region }}
-          cluster_name_fallback: ${{ inputs.cluster_name_fallback != '' && inputs.cluster_name_fallback || github.event.repository.name }}
-        secrets:
-          tf_var_cluster_name_dev: ${{ secrets.tf_var_cluster_name_dev }}
-          tf_var_cluster_name_qat: ${{ secrets.tf_var_cluster_name_qat }}
-          tf_var_cluster_name_stg: ${{ secrets.tf_var_cluster_name_stg }}
-          tf_var_cluster_name_prd: ${{ secrets.tf_var_cluster_name_prd }}
-          tf_var_vpc_id_dev: ${{ secrets.tf_var_vpc_id_dev }}
-          tf_var_vpc_id_qat: ${{ secrets.tf_var_vpc_id_qat }}
-          tf_var_vpc_id_stg: ${{ secrets.tf_var_vpc_id_stg }}
-          tf_var_vpc_id_prd: ${{ secrets.tf_var_vpc_id_prd }}
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          CLUSTER_FALLBACK: ${{ inputs.cluster_name_fallback != '' && inputs.cluster_name_fallback || github.event.repository.name }}
+          AWS_REGION: ${{ inputs.aws_region }}
+          CLUSTER_DEV: ${{ secrets.tf_var_cluster_name_dev }}
+          CLUSTER_QAT: ${{ secrets.tf_var_cluster_name_qat }}
+          CLUSTER_STG: ${{ secrets.tf_var_cluster_name_stg }}
+          CLUSTER_PRD: ${{ secrets.tf_var_cluster_name_prd }}
+          VPC_DEV: ${{ secrets.tf_var_vpc_id_dev }}
+          VPC_QAT: ${{ secrets.tf_var_vpc_id_qat }}
+          VPC_STG: ${{ secrets.tf_var_vpc_id_stg }}
+          VPC_PRD: ${{ secrets.tf_var_vpc_id_prd }}
+        run: |
+          set -e
+          case "${ENVIRONMENT}" in
+            dev)
+              TF_VAR_cluster_name="${CLUSTER_DEV}"
+              TF_VAR_vpc_id="${VPC_DEV}"
+              ;;
+            qat)
+              TF_VAR_cluster_name="${CLUSTER_QAT}"
+              TF_VAR_vpc_id="${VPC_QAT}"
+              ;;
+            stg)
+              TF_VAR_cluster_name="${CLUSTER_STG}"
+              TF_VAR_vpc_id="${VPC_STG}"
+              ;;
+            prd)
+              TF_VAR_cluster_name="${CLUSTER_PRD}"
+              TF_VAR_vpc_id="${VPC_PRD}"
+              ;;
+            *)
+              echo "❌ Unknown environment for INF CMP CON TF vars: ${ENVIRONMENT}"
+              exit 1
+              ;;
+          esac
+          if [ -z "${TF_VAR_cluster_name}" ] && [ -n "${CLUSTER_FALLBACK}" ]; then
+            TF_VAR_cluster_name="${CLUSTER_FALLBACK}"
+          fi
+          if [ -z "${TF_VAR_cluster_name}" ]; then
+            echo "❌ TF_VAR_cluster_name is required."
+            echo "   Set TF_VAR_CLUSTER_NAME_<ENV> or cluster_name_fallback."
+            exit 1
+          fi
+          if [ -z "${TF_VAR_vpc_id}" ]; then
+            echo "❌ TF_VAR_vpc_id is required."
+            echo "   Set VPC_ID_<ENV> repository secret."
+            exit 1
+          fi
+          echo "TF_VAR_cluster_name=${TF_VAR_cluster_name}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_vpc_id=${TF_VAR_vpc_id}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_environment=${ENVIRONMENT}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_aws_region=${AWS_REGION}" >> "${GITHUB_ENV}"
+          echo "INF CMP CON TF vars: cluster_name=${TF_VAR_cluster_name} environment=${ENVIRONMENT}"
 
       - name: Refresh State
         working-directory: ${{ inputs.terraform_directory }}
