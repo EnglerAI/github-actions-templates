@@ -45,6 +45,12 @@ on:
       aws_role_arn:
         description: "AWS IAM role ARN for OIDC"
         required: true
+      aws_account_id:
+        description: "AWS account ID (fallback for default state bucket name)"
+        required: false
+      tf_state_bucket:
+        description: "Optional TF state bucket secret when inputs.state_bucket is empty"
+        required: false
 
 jobs:
   deploy:
@@ -67,3 +73,5 @@ jobs:
       auto_apply: ${{ inputs.auto_apply }}
     secrets:
       aws_role_arn: ${{ secrets.aws_role_arn }}
+      aws_account_id: ${{ secrets.aws_account_id }}
+      tf_state_bucket: ${{ secrets.tf_state_bucket }}
