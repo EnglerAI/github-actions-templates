@@ -45,8 +45,18 @@ on:
         required: false
         type: boolean
         default: false
+      inf_sto_obj_tf_vars:
+        description: "Resolve TF_VAR_stack_name/environment for INF STO OBJ"
+        required: false
+        type: boolean
+        default: false
       cluster_name_fallback:
         description: "Fallback cluster name when env TF_VAR_CLUSTER_NAME_* secret is unset"
+        required: false
+        type: string
+        default: ""
+      stack_name_fallback:
+        description: "Fallback repo name for INF STO OBJ stack_name ({name}-stack)"
         required: false
         type: string
         default: ""
@@ -263,6 +273,22 @@ jobs:
           echo "TF_VAR_aws_region=${AWS_REGION}" >> "${GITHUB_ENV}"
           echo "INF CMP CON TF vars: cluster_name=${TF_VAR_cluster_name} environment=${ENVIRONMENT}"
 
+      - name: Resolve INF STO OBJ Terraform variables
+        if: inputs.inf_sto_obj_tf_vars
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          REPO_FALLBACK: ${{ inputs.stack_name_fallback != '' && inputs.stack_name_fallback || github.event.repository.name }}
+          AWS_REGION: ${{ inputs.aws_region }}
+        run: |
+          set -e
+          TF_VAR_stack_name="${REPO_FALLBACK}-stack"
+          TF_VAR_environment="${ENVIRONMENT}"
+          TF_VAR_aws_region="${AWS_REGION}"
+          echo "TF_VAR_stack_name=${TF_VAR_stack_name}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_environment=${TF_VAR_environment}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_aws_region=${TF_VAR_aws_region}" >> "${GITHUB_ENV}"
+          echo "INF STO OBJ TF vars: stack_name=${TF_VAR_stack_name} environment=${ENVIRONMENT}"
+
       - name: Terraform Plan
         id: plan
         working-directory: ${{ inputs.terraform_directory }}
@@ -447,6 +473,22 @@ jobs:
           echo "TF_VAR_aws_region=${AWS_REGION}" >> "${GITHUB_ENV}"
           echo "INF CMP CON TF vars: cluster_name=${TF_VAR_cluster_name} environment=${ENVIRONMENT}"
 
+      - name: Resolve INF STO OBJ Terraform variables
+        if: inputs.inf_sto_obj_tf_vars
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          REPO_FALLBACK: ${{ inputs.stack_name_fallback != '' && inputs.stack_name_fallback || github.event.repository.name }}
+          AWS_REGION: ${{ inputs.aws_region }}
+        run: |
+          set -e
+          TF_VAR_stack_name="${REPO_FALLBACK}-stack"
+          TF_VAR_environment="${ENVIRONMENT}"
+          TF_VAR_aws_region="${AWS_REGION}"
+          echo "TF_VAR_stack_name=${TF_VAR_stack_name}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_environment=${TF_VAR_environment}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_aws_region=${TF_VAR_aws_region}" >> "${GITHUB_ENV}"
+          echo "INF STO OBJ TF vars: stack_name=${TF_VAR_stack_name} environment=${ENVIRONMENT}"
+
       - name: Terraform Plan
         id: plan
         working-directory: ${{ inputs.terraform_directory }}
@@ -598,6 +640,22 @@ jobs:
           echo "TF_VAR_environment=${ENVIRONMENT}" >> "${GITHUB_ENV}"
           echo "TF_VAR_aws_region=${AWS_REGION}" >> "${GITHUB_ENV}"
           echo "INF CMP CON TF vars: cluster_name=${TF_VAR_cluster_name} environment=${ENVIRONMENT}"
+
+      - name: Resolve INF STO OBJ Terraform variables
+        if: inputs.inf_sto_obj_tf_vars
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          REPO_FALLBACK: ${{ inputs.stack_name_fallback != '' && inputs.stack_name_fallback || github.event.repository.name }}
+          AWS_REGION: ${{ inputs.aws_region }}
+        run: |
+          set -e
+          TF_VAR_stack_name="${REPO_FALLBACK}-stack"
+          TF_VAR_environment="${ENVIRONMENT}"
+          TF_VAR_aws_region="${AWS_REGION}"
+          echo "TF_VAR_stack_name=${TF_VAR_stack_name}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_environment=${TF_VAR_environment}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_aws_region=${TF_VAR_aws_region}" >> "${GITHUB_ENV}"
+          echo "INF STO OBJ TF vars: stack_name=${TF_VAR_stack_name} environment=${ENVIRONMENT}"
 
       - name: Refresh State
         working-directory: ${{ inputs.terraform_directory }}
