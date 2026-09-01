@@ -1,0 +1,82 @@
+# Reusable workflow: Terraform plan/apply for INF > NET > QUE message queue
+name: INF NET QUE Terraform Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "Target environment (dev/qat/stg/prd)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region"
+        required: true
+        type: string
+        default: "us-east-2"
+      terraform_version:
+        description: "Terraform version"
+        required: false
+        type: string
+        default: "1.14.3"
+      terraform_directory:
+        description: "Terraform working directory"
+        required: false
+        type: string
+        default: "terraform"
+      state_bucket:
+        description: "S3 bucket for Terraform state"
+        required: true
+        type: string
+      state_key:
+        description: "S3 key for Terraform state"
+        required: true
+        type: string
+      state_table:
+        description: "DynamoDB table for state locking"
+        required: false
+        type: string
+        default: ""
+      auto_apply:
+        description: "Automatically apply on push to env branches"
+        required: false
+        type: boolean
+        default: true
+      stack_name_fallback:
+        description: "Fallback repo name when building stack_name ({name}-stack)"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      aws_role_arn:
+        description: "AWS IAM role ARN for OIDC"
+        required: true
+      aws_account_id:
+        description: "AWS account ID (fallback for default state bucket name)"
+        required: false
+      tf_state_bucket:
+        description: "Optional TF state bucket secret when inputs.state_bucket is empty"
+        required: false
+
+jobs:
+  deploy:
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      issues: write
+    uses: EnglerAI/github-actions-templates/.github/workflows/terraform-workflow.yml@main
+    with:
+      environment: ${{ inputs.environment }}
+      aws_region: ${{ inputs.aws_region }}
+      terraform_version: ${{ inputs.terraform_version }}
+      terraform_directory: ${{ inputs.terraform_directory }}
+      state_bucket: ${{ inputs.state_bucket }}
+      state_key: ${{ inputs.state_key }}
+      state_table: ${{ inputs.state_table }}
+      auto_apply: ${{ inputs.auto_apply }}
+      inf_net_que_tf_vars: true
+      stack_name_fallback: ${{ inputs.stack_name_fallback }}
+    secrets:
+      aws_role_arn: ${{ secrets.aws_role_arn }}
+      aws_account_id: ${{ secrets.aws_account_id }}
+      tf_state_bucket: ${{ secrets.tf_state_bucket }}

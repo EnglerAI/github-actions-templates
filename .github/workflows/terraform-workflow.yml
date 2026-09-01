@@ -50,13 +50,18 @@ on:
         required: false
         type: boolean
         default: false
+      inf_net_que_tf_vars:
+        description: "Resolve TF_VAR_stack_name/environment for INF NET QUE"
+        required: false
+        type: boolean
+        default: false
       cluster_name_fallback:
         description: "Fallback cluster name when env TF_VAR_CLUSTER_NAME_* secret is unset"
         required: false
         type: string
         default: ""
       stack_name_fallback:
-        description: "Fallback repo name for INF STO OBJ stack_name ({name}-stack)"
+        description: "Fallback repo name for stack_name ({name}-stack)"
         required: false
         type: string
         default: ""
@@ -273,8 +278,8 @@ jobs:
           echo "TF_VAR_aws_region=${AWS_REGION}" >> "${GITHUB_ENV}"
           echo "INF CMP CON TF vars: cluster_name=${TF_VAR_cluster_name} environment=${ENVIRONMENT}"
 
-      - name: Resolve INF STO OBJ Terraform variables
-        if: inputs.inf_sto_obj_tf_vars
+      - name: Resolve stack_name Terraform variables
+        if: inputs.inf_sto_obj_tf_vars || inputs.inf_net_que_tf_vars
         env:
           ENVIRONMENT: ${{ inputs.environment }}
           REPO_FALLBACK: ${{ inputs.stack_name_fallback != '' && inputs.stack_name_fallback || github.event.repository.name }}
@@ -473,8 +478,8 @@ jobs:
           echo "TF_VAR_aws_region=${AWS_REGION}" >> "${GITHUB_ENV}"
           echo "INF CMP CON TF vars: cluster_name=${TF_VAR_cluster_name} environment=${ENVIRONMENT}"
 
-      - name: Resolve INF STO OBJ Terraform variables
-        if: inputs.inf_sto_obj_tf_vars
+      - name: Resolve stack_name Terraform variables
+        if: inputs.inf_sto_obj_tf_vars || inputs.inf_net_que_tf_vars
         env:
           ENVIRONMENT: ${{ inputs.environment }}
           REPO_FALLBACK: ${{ inputs.stack_name_fallback != '' && inputs.stack_name_fallback || github.event.repository.name }}
@@ -641,8 +646,8 @@ jobs:
           echo "TF_VAR_aws_region=${AWS_REGION}" >> "${GITHUB_ENV}"
           echo "INF CMP CON TF vars: cluster_name=${TF_VAR_cluster_name} environment=${ENVIRONMENT}"
 
-      - name: Resolve INF STO OBJ Terraform variables
-        if: inputs.inf_sto_obj_tf_vars
+      - name: Resolve stack_name Terraform variables
+        if: inputs.inf_sto_obj_tf_vars || inputs.inf_net_que_tf_vars
         env:
           ENVIRONMENT: ${{ inputs.environment }}
           REPO_FALLBACK: ${{ inputs.stack_name_fallback != '' && inputs.stack_name_fallback || github.event.repository.name }}
