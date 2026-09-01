@@ -1,0 +1,128 @@
+# Reusable workflow: CloudFormation deploy for INF > NET > QUE message queue
+name: INF NET QUE CloudFormation Deploy
+
+on:
+  workflow_call:
+    inputs:
+      stack_name:
+        description: "CloudFormation stack name"
+        required: true
+        type: string
+      codeitem_name:
+        description: "Codeitem name for NAME parameter (defaults to repo name)"
+        required: false
+        type: string
+        default: ""
+      environment:
+        description: "Target environment (dev/qat/stg/prd)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region"
+        required: true
+        type: string
+        default: "us-east-2"
+      template_file:
+        description: "Path to CloudFormation template"
+        required: false
+        type: string
+        default: "template.yml"
+      runner:
+        description: "Runner label"
+        required: false
+        type: string
+        default: "ubuntu-latest"
+    secrets:
+      aws_role_arn:
+        description: "AWS IAM role ARN for OIDC"
+        required: true
+      aws_account_id:
+        description: "AWS Account ID"
+        required: true
+      accountid:
+        description: "CloudBot Account ID (ACCOUNTID parameter)"
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    environment:
+      name: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-actions-inf-net-que-cf-deploy
+
+      - name: Verify AWS Identity and Account
+        run: |
+          set -e
+          echo "=== AWS Identity Verification ==="
+          IDENTITY=$(aws sts get-caller-identity)
+          echo "$IDENTITY"
+          ACTUAL_ACCOUNT=$(echo "$IDENTITY" | jq -r .Account)
+
+          if [ "${ACTUAL_ACCOUNT}" != "${{ secrets.aws_account_id }}" ]; then
+            echo "❌ ERROR: Account mismatch — expected ${{ secrets.aws_account_id }}, got ${ACTUAL_ACCOUNT}"
+            exit 1
+          fi
+          echo "✅ Authenticated to correct account: ${{ inputs.environment }}"
+
+      - name: Deploy INF NET QUE CloudFormation
+        run: |
+          set -e
+          echo "=== INF NET QUE CF Deploy ==="
+
+          STACK_NAME="${{ inputs.stack_name }}"
+          TEMPLATE_FILE="${{ inputs.template_file }}"
+          ENV="${{ inputs.environment }}"
+          CODEITEM_NAME="${{ inputs.codeitem_name }}"
+
+          if [ -z "${CODEITEM_NAME}" ]; then
+            CODEITEM_NAME="${{ github.event.repository.name }}"
+          fi
+
+          if [ ! -f "${TEMPLATE_FILE}" ]; then
+            echo "❌ Error: Template file not found: ${TEMPLATE_FILE}"
+            exit 1
+          fi
+
+          if [ -n "${{ secrets.accountid }}" ]; then
+            ACCOUNTID="${{ secrets.accountid }}"
+          else
+            ACCOUNTID="${{ secrets.aws_account_id }}"
+          fi
+
+          PARAM_OVERRIDES="Environment=${ENV} ACCOUNTID=${ACCOUNTID} NAME=${CODEITEM_NAME}"
+
+          echo "Stack: ${STACK_NAME}"
+          echo "Template: ${TEMPLATE_FILE}"
+          echo "Environment: ${ENV}"
+          echo "Name: ${CODEITEM_NAME}"
+
+          aws cloudformation deploy \
+            --template-file "${TEMPLATE_FILE}" \
+            --stack-name "${STACK_NAME}" \
+            --parameter-overrides ${PARAM_OVERRIDES} \
+            --no-fail-on-empty-changeset \
+            --region "${{ inputs.aws_region }}"
+
+          echo "✅ INF NET QUE CF deploy completed"
+
+      - name: Get stack info
+        run: |
+          echo "=== CloudFormation Stack Info ==="
+          aws cloudformation describe-stacks \
+            --stack-name "${{ inputs.stack_name }}" \
+            --region "${{ inputs.aws_region }}" \
+            --query 'Stacks[0].{Status:StackStatus,Outputs:Outputs}' \
+            --output table
