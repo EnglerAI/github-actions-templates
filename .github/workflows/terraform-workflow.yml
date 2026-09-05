@@ -55,6 +55,11 @@ on:
         required: false
         type: boolean
         default: false
+      inf_sec_sec_tf_vars:
+        description: "Resolve TF_VAR_stack_name/environment for INF SEC SEC"
+        required: false
+        type: boolean
+        default: false
       cluster_name_fallback:
         description: "Fallback cluster name when env TF_VAR_CLUSTER_NAME_* secret is unset"
         required: false
@@ -279,7 +284,7 @@ jobs:
           echo "INF CMP CON TF vars: cluster_name=${TF_VAR_cluster_name} environment=${ENVIRONMENT}"
 
       - name: Resolve stack_name Terraform variables
-        if: inputs.inf_sto_obj_tf_vars || inputs.inf_net_que_tf_vars
+        if: inputs.inf_sto_obj_tf_vars || inputs.inf_net_que_tf_vars || inputs.inf_sec_sec_tf_vars
         env:
           ENVIRONMENT: ${{ inputs.environment }}
           REPO_FALLBACK: ${{ inputs.stack_name_fallback != '' && inputs.stack_name_fallback || github.event.repository.name }}
@@ -479,7 +484,7 @@ jobs:
           echo "INF CMP CON TF vars: cluster_name=${TF_VAR_cluster_name} environment=${ENVIRONMENT}"
 
       - name: Resolve stack_name Terraform variables
-        if: inputs.inf_sto_obj_tf_vars || inputs.inf_net_que_tf_vars
+        if: inputs.inf_sto_obj_tf_vars || inputs.inf_net_que_tf_vars || inputs.inf_sec_sec_tf_vars
         env:
           ENVIRONMENT: ${{ inputs.environment }}
           REPO_FALLBACK: ${{ inputs.stack_name_fallback != '' && inputs.stack_name_fallback || github.event.repository.name }}
@@ -647,7 +652,7 @@ jobs:
           echo "INF CMP CON TF vars: cluster_name=${TF_VAR_cluster_name} environment=${ENVIRONMENT}"
 
       - name: Resolve stack_name Terraform variables
-        if: inputs.inf_sto_obj_tf_vars || inputs.inf_net_que_tf_vars
+        if: inputs.inf_sto_obj_tf_vars || inputs.inf_net_que_tf_vars || inputs.inf_sec_sec_tf_vars
         env:
           ENVIRONMENT: ${{ inputs.environment }}
           REPO_FALLBACK: ${{ inputs.stack_name_fallback != '' && inputs.stack_name_fallback || github.event.repository.name }}
