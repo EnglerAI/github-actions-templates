@@ -86,9 +86,13 @@ jobs:
           TEMPLATE_FILE="${{ inputs.template_file }}"
           ENV="${{ inputs.environment }}"
           CODEITEM_NAME="${{ inputs.codeitem_name }}"
+          AWS_REGION="${{ inputs.aws_region }}"
+          AWS_ACCOUNT_ID="${{ secrets.aws_account_id }}"
+          REPO_NAME="${{ github.event.repository.name }}"
+          SHORT_SHA="${GITHUB_SHA::7}"
 
           if [ -z "${CODEITEM_NAME}" ]; then
-            CODEITEM_NAME="${{ github.event.repository.name }}"
+            CODEITEM_NAME="${REPO_NAME}"
           fi
 
           if [ ! -f "${TEMPLATE_FILE}" ]; then
@@ -96,26 +100,93 @@ jobs:
             exit 1
           fi
 
+          if [ ! -f "modules/compute.yml" ] && [ ! -f "modules/compute.yaml" ]; then
+            echo "❌ Error: modules/compute.yml (nested stack module) not found"
+            exit 1
+          fi
+
           if [ -n "${{ secrets.accountid }}" ]; then
             ACCOUNTID="${{ secrets.accountid }}"
           else
-            ACCOUNTID="${{ secrets.aws_account_id }}"
+            ACCOUNTID="${AWS_ACCOUNT_ID}"
           fi
 
+          KMS_KEY_ALIAS="alias/CloudBotPipelineKey"
           PARAM_OVERRIDES="Environment=${ENV} ACCOUNTID=${ACCOUNTID} NAME=${CODEITEM_NAME}"
+          MODULE_FILE="modules/compute.yml"
+          if [ ! -f "${MODULE_FILE}" ]; then
+            MODULE_FILE="modules/compute.yaml"
+          fi
+
+          # Prefer the assumed-role account over workflow inputs to avoid bucket/role mismatch.
+          CALLER_IDENTITY=$(aws sts get-caller-identity --output json)
+          CALLER_ACCOUNT=$(echo "${CALLER_IDENTITY}" | jq -r .Account)
+          CALLER_ARN=$(echo "${CALLER_IDENTITY}" | jq -r .Arn)
+          echo "AWS caller: ${CALLER_ARN}"
+          if [ -n "${AWS_ACCOUNT_ID}" ] && [ "${AWS_ACCOUNT_ID}" != "${CALLER_ACCOUNT}" ]; then
+            echo "WARNING: aws_account_id=${AWS_ACCOUNT_ID} != caller account ${CALLER_ACCOUNT}; using caller account for artifacts bucket"
+          fi
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${AWS_REGION}-${CALLER_ACCOUNT}"
+          PACKAGE_PREFIX="cfn-nested/${REPO_NAME}/${SHORT_SHA}"
+          PACKAGED_TEMPLATE="packaged-template.yml"
+          OBJECT_KEY="${PACKAGE_PREFIX}/compute.yml"
 
           echo "Stack: ${STACK_NAME}"
           echo "Template: ${TEMPLATE_FILE}"
           echo "Environment: ${ENV}"
           echo "Name: ${CODEITEM_NAME}"
+          echo "Uploading nested module to s3://${ARTIFACTS_BUCKET}/${OBJECT_KEY} ..."
 
+          if ! aws s3 cp "${MODULE_FILE}" "s3://${ARTIFACTS_BUCKET}/${OBJECT_KEY}" \
+            --sse aws:kms \
+            --sse-kms-key-id "${KMS_KEY_ALIAS}" \
+            --region "${AWS_REGION}"; then
+            echo "ERROR: s3:PutObject denied on ${ARTIFACTS_BUCKET}."
+            echo "Caller: ${CALLER_ARN}"
+            echo "Update CI role in account ${CALLER_ACCOUNT} so identity policy allows"
+            echo "  arn:aws:s3:::cloudbot-codepipeline-artifacts-${AWS_REGION}-${CALLER_ACCOUNT}/*"
+            echo "Bucket policy also requires SSE-KMS (alias/CloudBotPipelineKey)."
+            exit 1
+          fi
+
+          TEMPLATE_URL="https://s3.${AWS_REGION}.amazonaws.com/${ARTIFACTS_BUCKET}/${OBJECT_KEY}"
+          echo "Nested TemplateURL: ${TEMPLATE_URL}"
+          sed -E \
+            "s|TemplateURL:[[:space:]]*\\./modules/compute\\.ya?ml|TemplateURL: ${TEMPLATE_URL}|g" \
+            "${TEMPLATE_FILE}" > "${PACKAGED_TEMPLATE}"
+
+          echo "Packaged TemplateURL values:"
+          BAD_URL=0
+          URL_COUNT=0
+          while IFS= read -r line; do
+            url=$(echo "${line}" | sed -E 's/^[[:space:]]*TemplateURL:[[:space:]]*//')
+            echo "  ${url}"
+            URL_COUNT=$((URL_COUNT + 1))
+            case "${url}" in
+              https://*) ;;
+              *)
+                echo "Error: TemplateURL must start with https:// after package, got: ${url}"
+                BAD_URL=1
+                ;;
+            esac
+          done < <(grep -E 'TemplateURL:' "${PACKAGED_TEMPLATE}" || true)
+
+          if [ "${BAD_URL}" -ne 0 ]; then
+            exit 1
+          fi
+          if [ "${URL_COUNT}" -lt 1 ]; then
+            echo "Error: no TemplateURL found in packaged template"
+            exit 1
+          fi
+
+          echo "Deploying packaged parent stack ${STACK_NAME} ..."
           aws cloudformation deploy \
-            --template-file "${TEMPLATE_FILE}" \
+            --template-file "${PACKAGED_TEMPLATE}" \
             --stack-name "${STACK_NAME}" \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --parameter-overrides ${PARAM_OVERRIDES} \
             --no-fail-on-empty-changeset \
-            --region "${{ inputs.aws_region }}"
+            --region "${AWS_REGION}"
 
           echo "✅ INF MOD CMP CF deploy completed"
 
