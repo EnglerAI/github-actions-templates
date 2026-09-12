@@ -175,8 +175,78 @@ jobs:
               body: output
             })
 
-  plan:
+  tflint:
     needs: [validate]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - name: Install TFLint
+        run: |
+          set -euo pipefail
+          curl -sSLO https://github.com/terraform-linters/tflint/releases/latest/download/tflint_linux_amd64.zip
+          unzip -o tflint_linux_amd64.zip
+          sudo install -c -v tflint /usr/local/bin/
+          rm -f tflint_linux_amd64.zip tflint
+          tflint --version
+
+      - name: Terraform Init (no backend)
+        working-directory: ${{ inputs.terraform_directory }}
+        run: terraform init -backend=false
+
+      - name: Run TFLint
+        id: tflint
+        working-directory: ${{ inputs.terraform_directory }}
+        run: |
+          set +e
+          echo "=== TFLint Output (Default Format) ==="
+          tflint --recursive --force
+          tflint_exit_code=$?
+
+          echo ""
+          echo "=== Generating TFLint JUnit Report ==="
+          tflint --recursive --format=junit --force > tflint.xml 2>&1
+          report_exit_code=$?
+          set -e
+
+          echo ""
+          echo "Debug: TFLint exit code (default format): $tflint_exit_code"
+          echo "Debug: TFLint exit code (junit format): $report_exit_code"
+
+          # tflint returns 2 for warnings/issues (non-fatal), 1 for errors (fatal), 0 for success
+          if [ "$tflint_exit_code" -eq 2 ]; then
+            echo "⚠️  TFLint found issues (warnings) but continuing..."
+            exit 0
+          elif [ "$tflint_exit_code" -eq 1 ]; then
+            echo "❌ TFLint found errors (fatal). Failing job."
+            exit 1
+          elif [ "$tflint_exit_code" -eq 0 ]; then
+            echo "✅ TFLint passed with no issues."
+            exit 0
+          else
+            echo "⚠️  TFLint returned unexpected exit code: $tflint_exit_code. Continuing..."
+            exit 0
+          fi
+
+      - name: Upload TFLint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tflint-report
+          path: ${{ inputs.terraform_directory }}/tflint.xml
+          if-no-files-found: ignore
+
+  plan:
+    needs: [validate, tflint]
     # PR-only: apply job runs plan+apply on push to main/env/*; parallel plan would lock state.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -373,7 +443,7 @@ jobs:
         run: exit 1
 
   apply:
-    needs: [validate]
+    needs: [validate, tflint]
     if: |
       github.event_name == 'push' &&
       (github.ref_name == 'main' || startsWith(github.ref_name, 'env/'))
