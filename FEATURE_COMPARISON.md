@@ -6,94 +6,71 @@ This document compares the features available in GitLab CI templates vs GitHub A
 
 ### ✅ Fully Implemented in Both
 
-| Feature                | GitLab CI                         | GitHub Actions                          | Status |
-| ---------------------- | --------------------------------- | --------------------------------------- | ------ |
+| Feature                | GitLab CI                            | GitHub Actions                          | Status |
+| ---------------------- | ------------------------------------ | --------------------------------------- | ------ |
 | **Quality Checks**     |
-| Flake8 linting         | `.default-flake8`                 | `quality-checks.yml` (flake8)           | ✅     |
-| Mypy type checking     | `.default-mypy`                   | `quality-checks.yml` (mypy)             | ✅     |
-| CloudFormation linting | N/A                               | `quality-checks.yml` (cfn-lint)         | ✅     |
-| Terraform linting      | `.default-tf_lint`                | `terraform-workflow.yml` (fmt/validate) | ✅     |
+| Flake8 linting         | `.default-flake8`                    | `quality-checks.yml` (flake8)           | ✅     |
+| Mypy type checking     | `.default-mypy`                      | `quality-checks.yml` (mypy)             | ✅     |
+| CloudFormation linting | N/A                                  | `quality-checks.yml` (cfn-lint)         | ✅     |
+| Terraform linting      | `.default-tf_lint`                   | `terraform-workflow.yml` (fmt/validate) | ✅     |
 | **Security Scans**     |
-| Bandit security scan   | `.default-bandit`                 | `security-scans.yml` (bandit)           | ✅     |
-| Checkov IaC scan       | `.default-checkov`                | `security-scans.yml` (checkov)          | ✅     |
-| Radon complexity       | `.default-radon`                  | `security-scans.yml` (radon)            | ✅     |
+| Bandit security scan   | `.default-bandit`                    | `security-scans.yml` (bandit)           | ✅     |
+| Checkov IaC scan       | `.default-checkov`                   | `security-scans.yml` (checkov)          | ✅     |
+| Radon complexity       | `.default-radon`                     | `security-scans.yml` (radon)            | ✅     |
 | **Testing**            |
-| Python tests (pytest)  | `.default-test`                   | `python-test.yml`                       | ✅     |
+| Python tests (pytest)  | `.default-test`                      | `python-test.yml`                       | ✅     |
 | **Documentation**      |
-| Verify docs            | `.default-verify_docs`            | `verify-docs.yml`                       | ✅     |
+| Verify docs            | `.default-verify_docs`               | `verify-docs.yml`                       | ✅     |
 | **Code Analysis**      |
-| Code archive to S3     | `.default-code_analyzer`          | `code-analyzer.yml`                     | ✅     |
+| Code archive to S3     | `.default-code_analyzer`             | `code-analyzer.yml`                     | ✅     |
 | **Deployment**         |
-| Lambda deployment      | `.default-deploy`                 | `lambda-deploy.yml`                     | ✅     |
-| Terraform plan/apply   | `.default-plan`, `.default-apply` | `terraform-workflow.yml`                | ✅     |
+| Lambda deployment      | `.default-deploy`                    | `lambda-deploy.yml`                     | ✅     |
+| Terraform plan/apply   | `.default-plan`, `.default-apply`    | `terraform-workflow.yml`                | ✅     |
+| **Versioning & Releases** |
+| Auto-tagging           | `.default-auto_tag`                  | `auto-tag-release.yml`                  | ✅     |
+| Auto-release           | `.default-auto_tag`                  | `auto-tag-release.yml`                  | ✅     |
+| **Branch Management**  |
+| Reset env branches     | `.default-reset_env_branches`        | `reset-env-branches.yml`                | ✅     |
+| **Build & Push**       |
+| Build and push Docker  | `.default-build_and_push`            | `docker-build-push.yml`                 | ✅     |
 
 ### ❌ Missing in GitHub Actions
 
-| Feature                       | GitLab CI                        | GitHub Actions | Priority    | Notes                              |
-| ----------------------------- | -------------------------------- | -------------- | ----------- | ---------------------------------- |
-| **Versioning & Releases**     |
-| Auto-tagging                  | `.default-auto_tag`              | ❌ Missing     | 🔴 **HIGH** | Semantic versioning, creates tags  |
-| Auto-release                  | `.default-auto_tag`              | ❌ Missing     | 🔴 **HIGH** | Creates GitHub releases with notes |
+| Feature                       | GitLab CI                        | GitHub Actions | Priority  | Notes                            |
+| ----------------------------- | -------------------------------- | -------------- | --------- | -------------------------------- |
 | **Infrastructure Management** |
-| Detect drift                  | `.default-detect_drift`          | ❌ Missing     | 🟡 Medium   | Terraform state drift detection    |
-| Verify infrastructure         | `.default-verify_infrastructure` | ❌ Missing     | 🟡 Medium   | Post-deploy verification           |
-| **Branch Management**         |
-| Reset env branches            | `.default-reset_env_branches`    | ❌ Missing     | 🟡 Medium   | Reset env branches to match main   |
-| **Build & Push**              |
-| Build and push Docker         | `.default-build_and_push`        | ❌ Missing     | 🟡 Medium   | Docker image build/push            |
+| Detect drift                  | `.default-detect_drift`          | ❌ Missing     | 🟡 Medium | Terraform state drift detection  |
+| Verify infrastructure         | `.default-verify_infrastructure` | ❌ Missing     | 🟡 Medium | Post-deploy verification         |
 | **Vue.js Specific**           |
-| Vue lint                      | `.default-vue_lint`              | ❌ Missing     | 🟢 Low      | Vue.js specific                    |
-| Vue test                      | `.default-vue_test`              | ❌ Missing     | 🟢 Low      | Vue.js specific                    |
-| Vue build                     | `.default-vue_build`             | ❌ Missing     | 🟢 Low      | Vue.js specific                    |
-| Vue deploy                    | `.default-vue_deploy`            | ❌ Missing     | 🟢 Low      | Vue.js specific                    |
+| Vue lint                      | `.default-vue_lint`              | ❌ Missing     | 🟢 Low    | Vue.js specific                  |
+| Vue test                      | `.default-vue_test`              | ❌ Missing     | 🟢 Low    | Vue.js specific                  |
+| Vue build                     | `.default-vue_build`             | ❌ Missing     | 🟢 Low    | Vue.js specific                  |
+| Vue deploy                    | `.default-vue_deploy`            | ❌ Missing     | 🟢 Low    | Vue.js specific                  |
 
-## Detailed Feature Gaps
+## Implemented: Auto-Tagging & Auto-Release
 
-### 1. Auto-Tagging & Auto-Release (🔴 HIGH PRIORITY)
+**GitLab:** `.default-auto_tag` — SemVer tags + GitLab Release on push to `main`.
 
-**GitLab Implementation:**
+**GitHub:** `auto-tag-release.yml` reusable workflow — same SemVer rules and GitHub Releases.
 
-- Semantic versioning (v1.2.3)
-- Branch-based versioning:
-  - `main` → patch bump (v1.2.3 → v1.2.4)
-  - `env/dev` → minor bump with beta suffix (v1.2.3 → v1.3.0-beta)
-  - `feature/*` → minor bump with alpha suffix
-  - `hotfix/*` → patch bump with hotfix suffix
-- Commit message overrides: "INCREASE MINOR VERSION", "INCREASE MAJOR VERSION"
-- Creates GitLab releases with MR descriptions as release notes
+Versioning:
 
-**GitHub Equivalent Needed:**
+- `main` → patch bump (`v1.2.3` → `v1.2.4`)
+- Commit message overrides: `INCREASE MINOR VERSION`, `INCREASE MAJOR VERSION`
+- Branch-based suffixes retained for non-main callers (`env/dev` → `-beta`, etc.)
+- Release notes prefer recently merged PR body; fall back to commit message
 
-- Create GitHub Actions workflow: `auto-tag-release.yml`
-- Use GitHub API to create releases
-- Extract PR descriptions for release notes
-- Support semantic versioning with same logic
+Call after successful deploy on `main` (see `template-inf-mod-cmp-tf-simple` deploy.yml).
 
-**Impact:** High - This is a core feature for version management and release tracking.
+## Implemented: Branch Reset
 
-### 2. Branch Reset (🟡 MEDIUM PRIORITY)
+**GitLab:** `.default-reset_env_branches`
 
-**GitLab Implementation:**
+**GitHub:** `reset-env-branches.yml` — resets `env/dev` from `main` after production deploy.
 
-- `.default-reset_env_branches` job
-- Resets environment branches (env/dev, env/qat, env/stg) to match main branch
-- Runs automatically after merges to main (post-merge mode)
-- Can also run on schedule (weekly) or manually
-- Checks if branches have diverged from main
-- Deletes and recreates branches from main to keep them in sync
-- Uses GitLab API or Git commands
+## Remaining Feature Gaps
 
-**GitHub Equivalent Needed:**
-
-- Create `reset-env-branches.yml` workflow
-- Use GitHub API to check branch divergence
-- Delete and recreate environment branches from main
-- Support multiple modes: post-merge, scheduled, manual
-- Run on push to main (post-merge) or on schedule
-
-**Impact:** Medium - Important for keeping environment branches in sync with main, but can be done manually if needed.
-
-### 3. Infrastructure Drift Detection (🟡 MEDIUM PRIORITY)
+### 1. Infrastructure Drift Detection (🟡 MEDIUM PRIORITY)
 
 **GitLab Implementation:**
 
@@ -109,7 +86,7 @@ This document compares the features available in GitLab CI templates vs GitHub A
 
 **Impact:** Medium - Useful for infrastructure codeitems but not critical for Lambda functions.
 
-### 4. Infrastructure Verification (🟡 MEDIUM PRIORITY)
+### 2. Infrastructure Verification (🟡 MEDIUM PRIORITY)
 
 **GitLab Implementation:**
 
@@ -124,95 +101,25 @@ This document compares the features available in GitLab CI templates vs GitHub A
 
 **Impact:** Medium - Good practice but can be added later.
 
-### 5. Docker Build & Push (🟡 MEDIUM PRIORITY)
+### 3. Vue.js Specific Jobs (🟢 LOW PRIORITY)
 
-**GitLab Implementation:**
+**GitLab:** `.default-vue_lint`, `.default-vue_test`, `.default-vue_build`, `.default-vue_deploy`
 
-- `.default-build_and_push` job
-- Builds Docker images
-- Pushes to container registry
-
-**GitHub Equivalent Needed:**
-
-- Create `docker-build-push.yml` workflow
-- Support ECR, Docker Hub, GitHub Container Registry
-
-**Impact:** Medium - Needed for containerized applications but not for Lambda functions.
+**GitHub:** Still missing dedicated Vue reusable workflows (partial coverage may exist via other deploy workflows).
 
 ## Recommendation
 
-### Option A: Integrate Now, Add Features Later (Recommended)
-
-**Pros:**
-
-- ✅ Get teams using GitHub Actions immediately
-- ✅ Establish patterns and best practices
-- ✅ Learn from real-world usage
-- ✅ Can add features incrementally based on actual needs
-- ✅ Current feature set covers 90% of use cases
-
-**Cons:**
-
-- ⚠️ Some codeitems will need to wait for auto-tag/release
-- ⚠️ May need to add features later anyway
-
-**Best for:** Teams that want to start using GitHub Actions now and can live without auto-tagging temporarily.
-
-### Option B: Add Features First, Then Integrate
-
-**Pros:**
-
-- ✅ Feature parity from day one
-- ✅ No need to go back and add features later
-- ✅ More complete solution
-
-**Cons:**
-
-- ⚠️ Delays integration by 1-2 weeks
-- ⚠️ Features may not be needed by all codeitems
-- ⚠️ May over-engineer before understanding real needs
-
-**Best for:** Teams that absolutely need auto-tagging/release before they can use GitHub Actions.
-
-## Recommended Approach
-
-**Start with Option A (Integrate Now):**
-
-1. **Phase 1: Integrate Current Templates** (Now)
-
-   - Use existing templates for new codeitems
-   - Establish patterns and workflows
-   - Collect feedback from teams
-
-2. **Phase 2: Add High-Priority Features** (1-2 weeks)
-
-   - Implement `auto-tag-release.yml` workflow
-   - Add to existing codeitems that need it
-   - Document usage
-
-3. **Phase 3: Add Medium-Priority Features** (As needed)
-   - Branch reset workflow (for keeping env branches in sync)
-   - Infrastructure drift detection (for Terraform codeitems)
-   - Docker build/push (for containerized apps)
-   - Infrastructure verification (as needed)
-
-**Rationale:**
-
-- Current templates cover the core CI/CD needs (quality, security, testing, deployment)
-- Auto-tagging/release is nice-to-have but not blocking
-- Can add features incrementally based on actual demand
-- Faster time-to-value for teams
+Current templates cover core CI/CD (quality, security, testing, deployment, auto-tag/release, env branch reset, Docker build/push). Remaining gaps are medium/low priority and can be added incrementally.
 
 ## Implementation Priority
 
-1. **Now:** Integrate current templates into codeitems
-2. **Week 1-2:** Add auto-tag-release workflow
-3. **As needed:** Add branch reset, drift detection, Docker build, etc.
+1. **Done:** Integrate current templates; auto-tag-release; reset-env-branches; docker-build-push
+2. **As needed:** Drift detection, infrastructure verification, Vue-specific workflows
 
 ## Notes
 
 - Most Lambda codeitems don't need Docker build/push
 - Most codeitems don't need infrastructure drift detection
-- Auto-tagging/release is the most commonly requested missing feature
-- Branch reset is important for maintaining environment branches but can be done manually
+- Auto-tagging/release is how Terraform modules are published for `git::...?ref=vX.Y.Z` consumption (no GitHub Packages Terraform format)
+- Branch reset keeps environment branches in sync with main after production deploy
 - Can always add features later without breaking existing workflows

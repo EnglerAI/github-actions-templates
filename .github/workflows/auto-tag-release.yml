@@ -1,0 +1,165 @@
+# Reusable workflow: SemVer auto-tag + GitHub Release after successful main deploy.
+# Aligned with GitLab .default-auto_tag behavior.
+# Call from codeitem deploy workflows after deploy succeeds on main.
+
+name: Auto tag and release
+
+on:
+  workflow_call:
+
+jobs:
+  tag-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Validate ref is main
+        id: validate
+        run: |
+          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            echo "Skipping auto-tag: not on main (ref=${{ github.ref }})"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+          echo "Running on main, proceeding with auto-tag and release"
+
+      - name: Checkout
+        if: steps.validate.outputs.skipped != 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        if: steps.validate.outputs.skipped != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          REPO="${{ github.repository }}"
+          git remote set-url origin "https://x-access-token:${TOKEN}@github.com/${REPO}.git"
+          git fetch --tags --prune --force
+
+      - name: Create SemVer tag and GitHub Release
+        if: steps.validate.outputs.skipped != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          BRANCH_NAME="${{ github.ref_name }}"
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+
+          # Latest SemVer tag (ignore pre-release / non-SemVer tags)
+          LATEST_TAG=$(git tag -l 'v*.*.*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || true)
+          if [ -z "${LATEST_TAG}" ]; then
+            LATEST_TAG="v0.0.0"
+          fi
+          echo "Latest tag: ${LATEST_TAG}"
+
+          VERSION="${LATEST_TAG#v}"
+          MAJOR=$(echo "${VERSION}" | cut -d. -f1)
+          MINOR=$(echo "${VERSION}" | cut -d. -f2)
+          PATCH=$(echo "${VERSION}" | cut -d. -f3)
+
+          if echo "${COMMIT_MSG}" | grep -q "INCREASE MINOR VERSION"; then
+            NEW_MINOR=$((MINOR + 1))
+            NEW_VERSION="${MAJOR}.${NEW_MINOR}.0"
+            TAG_NAME="v${NEW_VERSION}"
+            COMMIT_TYPE="minor"
+          elif echo "${COMMIT_MSG}" | grep -q "INCREASE MAJOR VERSION"; then
+            NEW_MAJOR=$((MAJOR + 1))
+            NEW_VERSION="${NEW_MAJOR}.0.0"
+            TAG_NAME="v${NEW_VERSION}"
+            COMMIT_TYPE="major"
+          elif [ "${BRANCH_NAME}" = "main" ]; then
+            NEW_PATCH=$((PATCH + 1))
+            NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+            TAG_NAME="v${NEW_VERSION}"
+            COMMIT_TYPE="patch"
+          elif [ "${BRANCH_NAME}" = "env/dev" ] || [ "${BRANCH_NAME}" = "env-dev" ]; then
+            NEW_MINOR=$((MINOR + 1))
+            NEW_VERSION="${MAJOR}.${NEW_MINOR}.0"
+            TAG_NAME="v${NEW_VERSION}-beta"
+            COMMIT_TYPE="minor"
+          elif [[ "${BRANCH_NAME}" == hotfix/* ]]; then
+            NEW_PATCH=$((PATCH + 1))
+            NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+            TAG_NAME="v${NEW_VERSION}-hotfix"
+            COMMIT_TYPE="patch"
+          elif [[ "${BRANCH_NAME}" == feature/* ]]; then
+            NEW_MINOR=$((MINOR + 1))
+            NEW_VERSION="${MAJOR}.${NEW_MINOR}.0"
+            TAG_NAME="v${NEW_VERSION}-alpha"
+            COMMIT_TYPE="minor"
+          else
+            TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+            TAG_NAME="v${BRANCH_NAME}-${TIMESTAMP}"
+            COMMIT_TYPE="development"
+          fi
+
+          echo "Creating ${COMMIT_TYPE} version tag: ${TAG_NAME}"
+
+          if git rev-parse -q --verify "refs/tags/${TAG_NAME}" >/dev/null; then
+            echo "Tag ${TAG_NAME} already exists, skipping"
+            exit 0
+          fi
+
+          TAG_MESSAGE="Auto-generated ${COMMIT_TYPE} version from ${BRANCH_NAME} branch - ${TAG_NAME}"
+
+          echo "Creating tag: ${TAG_NAME}"
+          git tag -a "${TAG_NAME}" -m "${TAG_MESSAGE}"
+
+          echo "Pushing tag to remote..."
+          git push origin "${TAG_NAME}"
+          echo "Successfully created and pushed tag: ${TAG_NAME}"
+
+          # Prefer recently merged PR body for release notes
+          RELEASE_NOTES="${TAG_MESSAGE}"
+          PR_NOTES=""
+          CUTOFF=$(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || \
+            date -u -v-1H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "")
+
+          if [ -n "${CUTOFF}" ]; then
+            echo "Attempting to fetch recently merged PR for release notes..."
+            MERGED_PRS=$(gh api \
+              "repos/${{ github.repository }}/pulls?state=closed&base=main&sort=updated&direction=desc&per_page=5" \
+              --jq "[.[] | select(.merged_at != null and .merged_at >= \"${CUTOFF}\")] | .[0] // empty" \
+              2>/dev/null || echo "")
+
+            if [ -n "${MERGED_PRS}" ] && [ "${MERGED_PRS}" != "null" ]; then
+              PR_TITLE=$(echo "${MERGED_PRS}" | jq -r '.title // empty')
+              PR_BODY=$(echo "${MERGED_PRS}" | jq -r '.body // empty')
+              PR_NUMBER=$(echo "${MERGED_PRS}" | jq -r '.number // empty')
+              if [ -n "${PR_BODY}" ] && [ "${PR_BODY}" != "null" ]; then
+                PR_NOTES=$(echo "${PR_BODY}" | head -c 2000)
+                echo "Found PR #${PR_NUMBER}: ${PR_TITLE}"
+              elif [ -n "${PR_TITLE}" ] && [ "${PR_TITLE}" != "null" ]; then
+                PR_NOTES="${PR_TITLE}"
+                echo "Using PR title: ${PR_TITLE}"
+              fi
+            fi
+          fi
+
+          if [ -n "${PR_NOTES}" ]; then
+            RELEASE_NOTES=$(printf "%s\n\n## Release Notes\n\n%s" "${TAG_MESSAGE}" "${PR_NOTES}")
+          elif [ -n "${COMMIT_MSG}" ]; then
+            COMMIT_NOTES=$(echo "${COMMIT_MSG}" | head -c 500)
+            RELEASE_NOTES=$(printf "%s\n\n## Release Notes\n\n%s" "${TAG_MESSAGE}" "${COMMIT_NOTES}")
+          fi
+
+          echo "Creating GitHub Release for ${TAG_NAME}..."
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            echo "Release for tag ${TAG_NAME} already exists, skipping creation"
+          else
+            if gh release create "${TAG_NAME}" \
+              --title "Release ${TAG_NAME}" \
+              --notes "${RELEASE_NOTES}"; then
+              echo "Successfully created release: ${TAG_NAME}"
+            else
+              echo "Warning: Failed to create release for ${TAG_NAME} (tag was already pushed)"
+            fi
+          fi
