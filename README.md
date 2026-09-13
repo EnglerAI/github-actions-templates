@@ -2,6 +2,8 @@
 
 Reusable GitHub Actions workflows for CloudBot codeitems. This repository mirrors the patterns established in `gitlab-ci-templates` for consistent CI/CD across GitLab and GitHub platforms.
 
+**Parity map:** [docs/PACK_TAXONOMY.md](docs/PACK_TAXONOMY.md) (GitLab packs ↔ GitHub workflows).
+
 ## 📁 Repository Structure
 
 ```
