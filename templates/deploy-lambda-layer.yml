@@ -1,0 +1,209 @@
+# Canonical deploy workflow for Lambda layer codeitems.
+# Placeholder: {{ REPO_NAME }} = repo directory name (e.g. layer-aws-utils).
+# Used by codeitem-rollout to generate .github/workflows/deploy.yml per repo.
+name: Deploy {{ REPO_NAME }} Layer
+
+on:
+  push:
+    branches:
+      - main # Production
+      - env/dev # Development
+  pull_request:
+    branches:
+      - main
+      - env/dev
+
+# CKV2_GHA_1: Explicit least-privilege; each job overrides as needed
+permissions: {}
+
+jobs:
+  # Step 1: Determine environment from branch
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      deploy_allowed: ${{ steps.env.outputs.deploy_allowed }}
+      stack_name: ${{ steps.env.outputs.stack_name }}
+      account_id: ${{ steps.env.outputs.account_id }}
+    steps:
+      - name: Determine environment
+        id: env
+        run: |
+          echo "=== Environment Determination ==="
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Event: ${{ github.event_name }}"
+
+          # For pull requests, use base branch
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BRANCH="${{ github.base_ref }}"
+            DEPLOY_ALLOWED="false"
+            echo "Pull request detected, target branch: ${BRANCH}"
+          else
+            BRANCH="${{ github.ref_name }}"
+            DEPLOY_ALLOWED="true"
+          fi
+
+          # Route to environment based on branch
+          case "${BRANCH}" in
+            main)
+              ENV="prd"
+              ACCOUNT_ID="${{ secrets.AWS_ACCOUNT_ID_PRD }}"
+              STACK_NAME="{{ REPO_NAME }}-stack"
+              ;;
+            env/dev)
+              ENV="dev"
+              ACCOUNT_ID="${{ secrets.AWS_ACCOUNT_ID_DEV }}"
+              STACK_NAME="{{ REPO_NAME }}-stack"
+              ;;
+            *)
+              ENV="unknown"
+              ACCOUNT_ID=""
+              STACK_NAME=""
+              DEPLOY_ALLOWED="false"
+              echo "⚠️  Unknown branch: ${BRANCH}"
+              ;;
+          esac
+
+          echo "Environment: ${ENV}"
+          echo "Deploy Allowed: ${DEPLOY_ALLOWED}"
+          echo "Stack Name: ${STACK_NAME}"
+          echo "Account ID: ${ACCOUNT_ID}"
+
+          echo "environment=${ENV}" >> $GITHUB_OUTPUT
+          echo "deploy_allowed=${DEPLOY_ALLOWED}" >> $GITHUB_OUTPUT
+          echo "stack_name=${STACK_NAME}" >> $GITHUB_OUTPUT
+          echo "account_id=${ACCOUNT_ID}" >> $GITHUB_OUTPUT
+
+  # Step 2: Verify documentation
+  verify-docs:
+    permissions:
+      contents: read
+      actions: write # For upload-artifact in reusable workflow
+    uses: EnglerAI/github-actions-templates/.github/workflows/verify-docs.yml@main
+    with:
+      runner: ubuntu-latest
+
+  # Step 3: Quality checks (Lambda layers: code in python/ directory)
+  quality:
+    needs: [setup]
+    permissions:
+      id-token: write
+      contents: read
+    uses: EnglerAI/github-actions-templates/.github/workflows/quality-checks.yml@main
+    with:
+      python_version: "3.12"
+      working_directory: "python"
+      requirements_file: "../requirements.txt"
+      run_flake8: true
+      run_mypy: true
+      run_cfn_lint: true
+      upload_reports: ${{ needs.setup.outputs.deploy_allowed == 'true' }}
+      use_pip_cache: false
+      runner: ubuntu-latest
+    secrets:
+      aws_role_arn: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_PRD }}
+      aws_account_id: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ACCOUNT_ID_DEV || secrets.AWS_ACCOUNT_ID_PRD }}
+      accountid: ${{ secrets.ACCOUNTID }}
+
+  # Step 4: Security scans
+  security:
+    needs: [setup]
+    permissions:
+      id-token: write
+      contents: read
+    uses: EnglerAI/github-actions-templates/.github/workflows/security-scans.yml@main
+    with:
+      python_version: "3.12"
+      working_directory: "python"
+      requirements_file: "../requirements.txt"
+      run_bandit: true
+      run_checkov: true
+      run_radon: true
+      upload_reports: ${{ needs.setup.outputs.deploy_allowed == 'true' }}
+      use_pip_cache: false
+      runner: ubuntu-latest
+    secrets:
+      aws_role_arn: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_PRD }}
+      aws_account_id: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ACCOUNT_ID_DEV || secrets.AWS_ACCOUNT_ID_PRD }}
+      accountid: ${{ secrets.ACCOUNTID }}
+
+  # Step 5: Run Python tests with coverage
+  test:
+    needs: [setup]
+    permissions:
+      security-events: write
+      contents: read
+      id-token: write
+      pull-requests: write
+      issues: write
+    uses: EnglerAI/github-actions-templates/.github/workflows/python-test.yml@main
+    with:
+      python_version: "3.12"
+      working_directory: "."
+      requirements_file: "requirements-dev.txt"
+      coverage_threshold: 0
+      upload_reports: ${{ needs.setup.outputs.deploy_allowed == 'true' }}
+      use_pip_cache: false
+      runner: ubuntu-latest
+    secrets:
+      aws_role_arn: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_PRD }}
+      aws_account_id: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ACCOUNT_ID_DEV || secrets.AWS_ACCOUNT_ID_PRD }}
+      accountid: ${{ secrets.ACCOUNTID }}
+
+  # Step 6: Code analyzer
+  code-analyzer:
+    needs: [setup]
+    if: needs.setup.outputs.deploy_allowed == 'true'
+    permissions:
+      id-token: write
+      contents: read
+    uses: EnglerAI/github-actions-templates/.github/workflows/code-analyzer.yml@main
+    with:
+      upload_reports: true
+      runner: ubuntu-latest
+    secrets:
+      aws_role_arn: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_PRD }}
+      aws_account_id: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ACCOUNT_ID_DEV || secrets.AWS_ACCOUNT_ID_PRD }}
+      accountid: ${{ secrets.ACCOUNTID }}
+
+  # Step 7: Package and Deploy Lambda Layer
+  deploy:
+    needs: [setup, verify-docs, quality, security, test, code-analyzer]
+    if: |
+      always() &&
+      needs.setup.outputs.deploy_allowed == 'true' &&
+      github.event_name == 'push' &&
+      (needs.verify-docs.result == 'success' || needs.verify-docs.result == 'skipped') &&
+      (needs.quality.result == 'success' || needs.quality.result == 'skipped') &&
+      (needs.security.result == 'success' || needs.security.result == 'skipped') &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      (needs.code-analyzer.result == 'success' || needs.code-analyzer.result == 'skipped')
+    permissions:
+      id-token: write
+      contents: read
+    uses: EnglerAI/github-actions-templates/.github/workflows/lambda-layer-deploy.yml@main
+    with:
+      layer_name: "{{ REPO_NAME }}"
+      stack_name: ${{ needs.setup.outputs.stack_name }}
+      environment: ${{ needs.setup.outputs.environment }}
+      aws_region: "us-east-2"
+      python_version: "3.12"
+      sam_template: "template.yml"
+      requirements_file: "requirements.txt"
+      layer_code_directory: "python"
+      runner: ubuntu-latest
+    secrets:
+      aws_role_arn: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_PRD }}
+      aws_account_id: ${{ needs.setup.outputs.environment == 'dev' && secrets.AWS_ACCOUNT_ID_DEV || secrets.AWS_ACCOUNT_ID_PRD }}
+
+  # Step 8: Reset env/dev from main (after production deploy)
+  reset-env-branches:
+    needs: [deploy]
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      needs.deploy.result == 'success'
+    permissions:
+      contents: write
+    uses: EnglerAI/github-actions-templates/.github/workflows/reset-env-branches.yml@main
