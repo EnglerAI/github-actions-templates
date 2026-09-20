@@ -8,7 +8,9 @@ Reusable GitHub Actions workflows for CloudBot codeitems. This repository mirror
 
 ```
 github-actions-templates/
-├── .github/workflows/           # Reusable workflows
+├── .github/workflows/           # Reusable workflows (+ self-release)
+│   ├── release-on-main.yml      # Self-version: tag + release on push to main
+│   ├── auto-tag-release.yml     # SemVer tag + GitHub Release (workflow_call)
 │   ├── lambda-deploy.yml        # Lambda function deployment (enhanced)
 │   ├── terraform-workflow.yml   # Terraform infrastructure
 │   ├── python-test.yml          # Python testing with coverage
@@ -52,12 +54,12 @@ jobs:
       aws_role: ${{ steps.env.outputs.aws_role }}
     steps:
       - uses: actions/checkout@v4
-      - uses: your-org/github-actions-templates/actions/determine-environment@main
+      - uses: your-org/github-actions-templates/actions/determine-environment@v0.0.1
         id: env
 
   deploy:
     needs: setup
-    uses: your-org/github-actions-templates/.github/workflows/lambda-deploy.yml@main
+    uses: your-org/github-actions-templates/.github/workflows/lambda-deploy.yml@v0.0.1
     with:
       function_name: my-lambda
       environment: ${{ needs.setup.outputs.environment }}
@@ -66,7 +68,23 @@ jobs:
       aws_role_arn: ${{ needs.setup.outputs.aws_role }}
 ```
 
+Prefer pinning reusable workflows and actions to a **SemVer tag** (e.g. `@v0.0.1`) rather than `@main`. This library self-versions on every push to `main` via `release-on-main.yml` → `auto-tag-release.yml` (tag + GitHub Release).
+
 ## 📦 Available Workflows
+
+### Auto tag and release (`auto-tag-release.yml`)
+
+Reusable SemVer tagging and GitHub Releases (aligned with GitLab `.default-auto_tag`). Call from codeitem deploy workflows after deploy succeeds on `main`.
+
+This repository also calls it from `release-on-main.yml` on push to `main`, so the template library itself is versioned.
+
+**When to use (consumers):** Add a job that calls this workflow after your deploy job on push to `main`.
+
+**Features:**
+
+- ✅ Patch bump on `main` (`v1.2.3` → `v1.2.4`); commit message overrides for minor/major
+- ✅ Creates an annotated tag and a GitHub Release
+- ✅ Release notes prefer recently merged PR body; fall back to commit message
 
 ### Lambda Deploy (`lambda-deploy.yml`)
 
@@ -425,6 +443,7 @@ See `examples/` directory for complete codeitem configurations.
 | `.default-plan`            | `terraform-workflow.yml`       | ✅ Complete |
 | `.default-apply`           | `terraform-workflow.yml`       | ✅ Complete |
 | `.default-reset_env_branches` | `reset-env-branches.yml`    | ✅ Complete |
+| `.default-auto_tag`        | `auto-tag-release.yml` (+ `release-on-main.yml` for this repo) | ✅ Complete |
 
 **All workflows support:**
 

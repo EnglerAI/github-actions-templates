@@ -1,0 +1,15 @@
+# Self-release for this template library: SemVer tag + GitHub Release on push to main.
+# Calls the reusable auto-tag-release workflow (same as consumer codeitems).
+
+name: Release on main
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  auto-tag-release:
+    permissions:
+      contents: write
+      pull-requests: read
+    uses: ./.github/workflows/auto-tag-release.yml

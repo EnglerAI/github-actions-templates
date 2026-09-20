@@ -60,7 +60,9 @@ Versioning:
 - Branch-based suffixes retained for non-main callers (`env/dev` → `-beta`, etc.)
 - Release notes prefer recently merged PR body; fall back to commit message
 
-Call after successful deploy on `main` (see `template-inf-mod-cmp-tf-simple` deploy.yml).
+**This library:** `release-on-main.yml` calls `auto-tag-release.yml` on every push to `main`, so `github-actions-templates` itself is SemVer-tagged and released.
+
+**Consumers:** Call after successful deploy on `main` (see `template-inf-mod-cmp-tf-simple` deploy.yml). Prefer pinning reusable workflows to a release tag (e.g. `@v0.0.1`) rather than `@main`.
 
 ## Implemented: Branch Reset
 
