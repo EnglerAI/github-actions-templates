@@ -74,7 +74,7 @@ jobs:
     permissions:
       contents: read
       actions: write # For upload-artifact in reusable workflow
-    uses: EnglerAI/github-actions-templates/.github/workflows/verify-docs.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/verify-docs.yml@{{ TEMPLATES_REF }}
     with:
       runner: ubuntu-latest
 
@@ -84,7 +84,7 @@ jobs:
     permissions:
       id-token: write # Required for AWS OIDC authentication
       contents: read
-    uses: EnglerAI/github-actions-templates/.github/workflows/quality-checks.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/quality-checks.yml@{{ TEMPLATES_REF }}
     with:
       python_version: "3.12"
       run_flake8: true
@@ -104,7 +104,7 @@ jobs:
     permissions:
       id-token: write # Required for AWS OIDC authentication
       contents: read
-    uses: EnglerAI/github-actions-templates/.github/workflows/security-scans.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/security-scans.yml@{{ TEMPLATES_REF }}
     with:
       python_version: "3.12"
       run_bandit: true
@@ -127,7 +127,7 @@ jobs:
       id-token: write # Required for AWS OIDC
       pull-requests: write # Required for commenting on PRs
       issues: write # Required for commenting on PRs
-    uses: EnglerAI/github-actions-templates/.github/workflows/python-test.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/python-test.yml@{{ TEMPLATES_REF }}
     with:
       python_version: "3.12"
       coverage_threshold: 0 # No threshold - tests may fail due to layer dependencies
@@ -147,7 +147,7 @@ jobs:
     permissions:
       id-token: write # Required for AWS OIDC authentication
       contents: read
-    uses: EnglerAI/github-actions-templates/.github/workflows/code-analyzer.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/code-analyzer.yml@{{ TEMPLATES_REF }}
     with:
       upload_reports: true
       runner: ubuntu-latest
@@ -170,7 +170,7 @@ jobs:
     permissions:
       id-token: write # Required for AWS OIDC authentication
       contents: read
-    uses: EnglerAI/github-actions-templates/.github/workflows/lambda-deploy.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/lambda-deploy.yml@{{ TEMPLATES_REF }}
     with:
       function_name: "{{ REPO_NAME }}"
       stack_name: ${{ needs.setup.outputs.stack_name }}
@@ -200,4 +200,4 @@ jobs:
       needs.deploy.result == 'success'
     permissions:
       contents: write
-    uses: EnglerAI/github-actions-templates/.github/workflows/reset-env-branches.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/reset-env-branches.yml@{{ TEMPLATES_REF }}

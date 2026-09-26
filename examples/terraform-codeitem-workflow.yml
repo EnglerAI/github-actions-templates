@@ -67,7 +67,7 @@ jobs:
   # Step 2: Run Terraform workflow
   terraform:
     needs: [setup]
-    uses: your-org/github-actions-templates/.github/workflows/terraform-workflow.yml@main
+    uses: your-org/github-actions-templates/.github/workflows/terraform-workflow.yml@v0.0.1
     with:
       terraform_version: '1.12.2'
       terraform_directory: 'terraform'
