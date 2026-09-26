@@ -79,7 +79,7 @@ jobs:
     permissions:
       contents: read
       actions: write # For upload-artifact in reusable workflow
-    uses: EnglerAI/github-actions-templates/.github/workflows/verify-docs.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/verify-docs.yml@{{ TEMPLATES_REF }}
     with:
       runner: ubuntu-latest
 
@@ -89,7 +89,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    uses: EnglerAI/github-actions-templates/.github/workflows/quality-checks.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/quality-checks.yml@{{ TEMPLATES_REF }}
     with:
       python_version: "3.12"
       working_directory: "python"
@@ -111,7 +111,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    uses: EnglerAI/github-actions-templates/.github/workflows/security-scans.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/security-scans.yml@{{ TEMPLATES_REF }}
     with:
       python_version: "3.12"
       working_directory: "python"
@@ -136,7 +136,7 @@ jobs:
       id-token: write
       pull-requests: write
       issues: write
-    uses: EnglerAI/github-actions-templates/.github/workflows/python-test.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/python-test.yml@{{ TEMPLATES_REF }}
     with:
       python_version: "3.12"
       working_directory: "."
@@ -157,7 +157,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    uses: EnglerAI/github-actions-templates/.github/workflows/code-analyzer.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/code-analyzer.yml@{{ TEMPLATES_REF }}
     with:
       upload_reports: true
       runner: ubuntu-latest
@@ -181,7 +181,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    uses: EnglerAI/github-actions-templates/.github/workflows/lambda-layer-deploy.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/lambda-layer-deploy.yml@{{ TEMPLATES_REF }}
     with:
       layer_name: "{{ REPO_NAME }}"
       stack_name: ${{ needs.setup.outputs.stack_name }}
@@ -206,4 +206,4 @@ jobs:
       needs.deploy.result == 'success'
     permissions:
       contents: write
-    uses: EnglerAI/github-actions-templates/.github/workflows/reset-env-branches.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/reset-env-branches.yml@{{ TEMPLATES_REF }}

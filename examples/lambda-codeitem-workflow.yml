@@ -119,7 +119,7 @@ jobs:
   # Step 2: Verify documentation
   # Validates that README.md exists and is properly formatted
   verify-docs:
-    uses: bengler9/github-actions-templates/.github/workflows/verify-docs.yml@main
+    uses: bengler9/github-actions-templates/.github/workflows/verify-docs.yml@v0.0.1
 
   # Step 3: Quality checks (linting, type checking, template validation)
   # CUSTOMIZE: Enable/disable specific checks, set Python version
@@ -128,7 +128,7 @@ jobs:
     permissions:
       id-token: write # Required for AWS OIDC authentication
       contents: read
-    uses: bengler9/github-actions-templates/.github/workflows/quality-checks.yml@main
+    uses: bengler9/github-actions-templates/.github/workflows/quality-checks.yml@v0.0.1
     with:
       python_version: "3.12"  # CUSTOMIZE: Your Python version
       run_flake8: true         # CUSTOMIZE: Enable/disable flake8
@@ -147,7 +147,7 @@ jobs:
     permissions:
       id-token: write # Required for AWS OIDC authentication
       contents: read
-    uses: bengler9/github-actions-templates/.github/workflows/security-scans.yml@main
+    uses: bengler9/github-actions-templates/.github/workflows/security-scans.yml@v0.0.1
     with:
       python_version: "3.12"  # CUSTOMIZE: Your Python version
       run_bandit: true         # CUSTOMIZE: Enable/disable Bandit security scan
@@ -168,7 +168,7 @@ jobs:
       id-token: write # Required for AWS OIDC
       pull-requests: write # Required for commenting on PRs
       issues: write # Required for commenting on PRs
-    uses: bengler9/github-actions-templates/.github/workflows/python-test.yml@main
+    uses: bengler9/github-actions-templates/.github/workflows/python-test.yml@v0.0.1
     with:
       python_version: "3.12"  # CUSTOMIZE: Your Python version
       coverage_threshold: 0     # CUSTOMIZE: Minimum coverage % (0 = no threshold)
@@ -185,7 +185,7 @@ jobs:
     permissions:
       id-token: write # Required for AWS OIDC authentication
       contents: read
-    uses: bengler9/github-actions-templates/.github/workflows/code-analyzer.yml@main
+    uses: bengler9/github-actions-templates/.github/workflows/code-analyzer.yml@v0.0.1
     with:
       upload_reports: true
     secrets:
@@ -207,7 +207,7 @@ jobs:
     permissions:
       id-token: write # Required for AWS OIDC authentication
       contents: read
-    uses: bengler9/github-actions-templates/.github/workflows/lambda-deploy.yml@main
+    uses: bengler9/github-actions-templates/.github/workflows/lambda-deploy.yml@v0.0.1
     with:
       function_name: YOUR_FUNCTION_NAME  # CUSTOMIZE: Your Lambda function name
       stack_name: ${{ needs.setup.outputs.stack_name }}
@@ -233,4 +233,4 @@ jobs:
       needs.deploy.result == 'success'
     permissions:
       contents: write
-    uses: EnglerAI/github-actions-templates/.github/workflows/reset-env-branches.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/reset-env-branches.yml@v0.0.1

@@ -74,7 +74,7 @@ jobs:
     permissions:
       contents: read
       actions: write
-    uses: EnglerAI/github-actions-templates/.github/workflows/verify-docs.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/verify-docs.yml@v0.0.1
     with:
       runner: ubuntu-latest
 
@@ -88,7 +88,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    uses: EnglerAI/github-actions-templates/.github/workflows/vue-terraform-deploy.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/vue-terraform-deploy.yml@v0.0.1
     with:
       project_name: "YOUR_REPO_NAME"
       environment: ${{ needs.setup.outputs.environment }}

@@ -22,4 +22,4 @@ permissions:
 jobs:
   reset-env-branches:
     runs-on: ubuntu-latest
-    uses: EnglerAI/github-actions-templates/.github/workflows/reset-env-branches.yml@main
+    uses: EnglerAI/github-actions-templates/.github/workflows/reset-env-branches.yml@v0.0.1
