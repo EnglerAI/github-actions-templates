@@ -204,7 +204,7 @@ jobs:
           echo "=== Uploading Layer Package to S3 ==="
 
           # S3 bucket for artifacts (matches GitLab CI/CD approach)
-          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${{ inputs.aws_region }}-${{ secrets.aws_account_id }}"
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-us-east-2-${{ secrets.aws_account_id }}"
           S3_KEY="lambda-packages/${{ inputs.layer_name }}/layer-${{ github.sha }}.zip"
 
           echo "Bucket: ${ARTIFACTS_BUCKET}"
@@ -214,7 +214,7 @@ jobs:
           aws s3 cp layer.zip "s3://${ARTIFACTS_BUCKET}/${S3_KEY}" \
             --sse aws:kms \
             --sse-kms-key-id ${{ inputs.kms_key_alias }} \
-            --region ${{ inputs.aws_region }}
+            --region us-east-2
 
           echo "s3_bucket=${ARTIFACTS_BUCKET}" >> $GITHUB_ENV
           echo "s3_key=${S3_KEY}" >> $GITHUB_ENV

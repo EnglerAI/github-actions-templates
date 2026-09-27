@@ -152,7 +152,7 @@ jobs:
       runner: ubuntu-latest
       stack_name: ${{ needs.setup.outputs.stack_name }}
       environment: ${{ needs.setup.outputs.environment }}
-      aws_region: us-east-2
+      aws_region: ${{ vars.AWS_REGION }}
       template_file: template.yml
       parameter_overrides: "NAME=${{ needs.setup.outputs.stack_name }} ARTIFACTSBUCKET=cloudbot-codepipeline-artifacts-us-east-2-000000000000 S3Key=not-applicable"
       capabilities: "CAPABILITY_IAM,CAPABILITY_NAMED_IAM"

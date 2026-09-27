@@ -9,8 +9,13 @@ on:
         required: true
         type: string
       aws_region:
-        description: "AWS region"
+        description: "AWS region where resources are created. vars.AWS_REGION overrides this when set."
         required: true
+        type: string
+        default: "us-east-2"
+      state_region:
+        description: "Region of the Terraform state bucket and lock table"
+        required: false
         type: string
         default: "us-east-2"
       terraform_version:
@@ -67,7 +72,8 @@ jobs:
     uses: EnglerAI/github-actions-templates/.github/workflows/terraform-workflow.yml@main
     with:
       environment: ${{ inputs.environment }}
-      aws_region: ${{ inputs.aws_region }}
+      aws_region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}
+      state_region: ${{ inputs.state_region }}
       terraform_version: ${{ inputs.terraform_version }}
       terraform_directory: ${{ inputs.terraform_directory }}
       state_bucket: ${{ inputs.state_bucket }}

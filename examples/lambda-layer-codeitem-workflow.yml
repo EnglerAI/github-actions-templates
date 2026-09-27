@@ -194,7 +194,7 @@ jobs:
       layer_name: "[YOUR-LAYER-NAME]"  # CUSTOMIZE: Your layer name (e.g., "layer-testing-utils")
       stack_name: ${{ needs.setup.outputs.stack_name }}
       environment: ${{ needs.setup.outputs.environment }}
-      aws_region: "us-east-2"  # CUSTOMIZE: Your AWS region
+      aws_region: ${{ vars.AWS_REGION }}
       python_version: "3.12"  # CUSTOMIZE: Your Python version
       sam_template: "template.yml"  # CUSTOMIZE: Path to your SAM template
       requirements_file: "requirements.txt"  # CUSTOMIZE: Path to requirements.txt

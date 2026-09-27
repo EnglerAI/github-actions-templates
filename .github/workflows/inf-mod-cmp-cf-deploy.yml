@@ -126,7 +126,9 @@ jobs:
           if [ -n "${AWS_ACCOUNT_ID}" ] && [ "${AWS_ACCOUNT_ID}" != "${CALLER_ACCOUNT}" ]; then
             echo "WARNING: aws_account_id=${AWS_ACCOUNT_ID} != caller account ${CALLER_ACCOUNT}; using caller account for artifacts bucket"
           fi
-          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${AWS_REGION}-${CALLER_ACCOUNT}"
+          # Platform artifact bucket stays in us-east-2; AWS_REGION is the stack region.
+          ARTIFACTS_REGION="us-east-2"
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${ARTIFACTS_REGION}-${CALLER_ACCOUNT}"
           PACKAGE_PREFIX="cfn-nested/${REPO_NAME}/${SHORT_SHA}"
           PACKAGED_TEMPLATE="packaged-template.yml"
           OBJECT_KEY="${PACKAGE_PREFIX}/compute.yml"
@@ -140,16 +142,16 @@ jobs:
           if ! aws s3 cp "${MODULE_FILE}" "s3://${ARTIFACTS_BUCKET}/${OBJECT_KEY}" \
             --sse aws:kms \
             --sse-kms-key-id "${KMS_KEY_ALIAS}" \
-            --region "${AWS_REGION}"; then
+            --region "${ARTIFACTS_REGION}"; then
             echo "ERROR: s3:PutObject denied on ${ARTIFACTS_BUCKET}."
             echo "Caller: ${CALLER_ARN}"
             echo "Update CI role in account ${CALLER_ACCOUNT} so identity policy allows"
-            echo "  arn:aws:s3:::cloudbot-codepipeline-artifacts-${AWS_REGION}-${CALLER_ACCOUNT}/*"
+            echo "  arn:aws:s3:::cloudbot-codepipeline-artifacts-${ARTIFACTS_REGION}-${CALLER_ACCOUNT}/*"
             echo "Bucket policy also requires SSE-KMS (alias/CloudBotPipelineKey)."
             exit 1
           fi
 
-          TEMPLATE_URL="https://s3.${AWS_REGION}.amazonaws.com/${ARTIFACTS_BUCKET}/${OBJECT_KEY}"
+          TEMPLATE_URL="https://s3.${ARTIFACTS_REGION}.amazonaws.com/${ARTIFACTS_BUCKET}/${OBJECT_KEY}"
           echo "Nested TemplateURL: ${TEMPLATE_URL}"
           sed -E \
             "s|TemplateURL:[[:space:]]*\\./modules/compute\\.ya?ml|TemplateURL: ${TEMPLATE_URL}|g" \

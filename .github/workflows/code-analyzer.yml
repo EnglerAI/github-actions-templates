@@ -124,7 +124,7 @@ jobs:
           fi
 
           # S3 bucket uses AWS Account ID, key path uses CloudBot ACCOUNTID
-          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${{ inputs.aws_region }}-${AWS_ACCOUNT_ID}"
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-us-east-2-${AWS_ACCOUNT_ID}"
           S3_KEY="codeitems/${ACCOUNTID}/${{ steps.archive.outputs.project_name }}/codeitem-${GITHUB_SHA}.tar.gz"
 
           echo "Bucket: ${ARTIFACTS_BUCKET}"
@@ -137,7 +137,7 @@ jobs:
           if aws s3 cp "${{ steps.archive.outputs.archive_name }}" "s3://${ARTIFACTS_BUCKET}/${S3_KEY}" \
             --sse aws:kms \
             --sse-kms-key-id ${{ inputs.kms_key_alias }} \
-            --region ${{ inputs.aws_region }} 2>&1; then
+            --region us-east-2 2>&1; then
             echo "✅ Code archive uploaded successfully"
             echo "S3 URL: s3://${ARTIFACTS_BUCKET}/${S3_KEY}"
           else

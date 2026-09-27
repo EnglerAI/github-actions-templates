@@ -151,7 +151,7 @@ jobs:
         run: |
           echo "=== Testing S3 Permissions ==="
 
-          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${{ inputs.aws_region }}-${{ secrets.aws_account_id }}"
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-us-east-2-${{ secrets.aws_account_id }}"
           ACTUAL_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 
           echo "Target Bucket: ${ARTIFACTS_BUCKET}"
@@ -160,7 +160,7 @@ jobs:
           # Verify bucket exists
           echo ""
           echo "1. Verifying bucket exists..."
-          if aws s3api head-bucket --bucket "${ARTIFACTS_BUCKET}" 2>&1; then
+          if aws s3api head-bucket --bucket "${ARTIFACTS_BUCKET}" --region us-east-2 2>&1; then
             echo "✅ Bucket exists and is accessible"
           else
             echo "⚠️  Bucket doesn't exist or not accessible (may not be needed for this deployment)"
@@ -168,7 +168,7 @@ jobs:
 
           echo ""
           echo "2. Testing ListBucket..."
-          if aws s3 ls "s3://${ARTIFACTS_BUCKET}/" 2>&1; then
+          if aws s3 ls "s3://${ARTIFACTS_BUCKET}/" --region us-east-2 2>&1; then
             echo "✅ ListBucket succeeded"
           else
             echo "⚠️  ListBucket failed (may not be needed for this deployment)"

@@ -14,8 +14,13 @@ on:
         required: true
         type: string
       aws_region:
-        description: "AWS region"
+        description: "AWS region where resources are created. vars.AWS_REGION overrides this when set."
         required: true
+        type: string
+        default: "us-east-2"
+      state_region:
+        description: "Region of the Terraform state bucket and lock table"
+        required: false
         type: string
         default: "us-east-2"
       terraform_version:
@@ -84,7 +89,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_role_arn }}
-          aws-region: ${{ inputs.aws_region }}
+          aws-region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}
           role-session-name: github-actions-vue-terraform-deploy
 
       - name: Verify AWS Account
@@ -109,7 +114,7 @@ jobs:
           INPUT_STATE_BUCKET: ${{ inputs.state_bucket }}
           SECRET_STATE_BUCKET: ${{ secrets.tf_state_bucket }}
           AWS_ACCOUNT_ID: ${{ secrets.aws_account_id }}
-          AWS_REGION_INPUT: ${{ inputs.aws_region }}
+          TF_STATE_REGION: ${{ inputs.state_region }}
           STATE_KEY: ${{ inputs.state_key }}
           STATE_TABLE: ${{ inputs.state_table }}
         run: |
@@ -119,7 +124,7 @@ jobs:
             STATE_BUCKET="${SECRET_STATE_BUCKET}"
           fi
           if [ -z "${STATE_BUCKET}" ] && [ -n "${AWS_ACCOUNT_ID}" ]; then
-            STATE_BUCKET="cloudbot-terraform-state-${AWS_REGION_INPUT}-${AWS_ACCOUNT_ID}"
+            STATE_BUCKET="cloudbot-terraform-state-${TF_STATE_REGION}-${AWS_ACCOUNT_ID}"
             echo "Derived TF state bucket from aws_account_id"
           fi
           if [ -z "${STATE_BUCKET}" ]; then
@@ -134,7 +139,7 @@ jobs:
           terraform init \
             -backend-config="bucket=${STATE_BUCKET}" \
             -backend-config="key=${STATE_KEY}" \
-            -backend-config="region=${AWS_REGION_INPUT}" \
+            -backend-config="region=${TF_STATE_REGION}" \
             ${LOCK_ARGS} \
             -backend-config="encrypt=true"
 
@@ -143,7 +148,7 @@ jobs:
         env:
           TF_VAR_project_name: ${{ inputs.project_name }}
           TF_VAR_environment: ${{ inputs.environment }}
-          TF_VAR_aws_region: ${{ inputs.aws_region }}
+          TF_VAR_aws_region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}
         run: |
           set -e
           terraform plan -no-color -out=tfplan
