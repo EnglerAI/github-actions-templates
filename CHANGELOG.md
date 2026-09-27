@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - React SPA consumers of the Vite SPA pack
+
+- Vue workflows (`vue-static-deploy.yml`, `vue-cf-deploy.yml`, `vue-terraform-deploy.yml`) are the shared Vite SPA deploy path for Vue and React. React starters call them directly. No separate React workflow files.
+
 ### Added - SVC API (EKS) deploy workflows
 - **`docker-build-push.yml`** — Dockerfile build → GHCR push
 - **`helm-eks-deploy.yml`** — Helm upgrade to EKS (`k8s/` chart)

@@ -13,7 +13,7 @@ This mirrors the three-layer model in
 | `jobs/python.yml` | `python-test.yml`, `quality-checks.yml`, `security-scans.yml` |
 | `jobs/cloudformation.yml` | `cloudformation-deploy.yml`, INF `*-cf-deploy.yml` |
 | `jobs/lambda.yml` | `lambda-deploy.yml`, `lambda-layer-deploy.yml`, `tul-cli-*-deploy.yml` |
-| `jobs/vue.yml` | `vue-*-deploy.yml`, `vue-static-deploy.yml` |
+| `jobs/vue.yml` | `vue-*-deploy.yml`, `vue-static-deploy.yml` (Vite SPA pack; Vue and React) |
 | `jobs/k8s.yml` | `docker-build-push.yml`, `helm-eks-deploy.yml`, `svc-api-*-deploy.yml` |
 | `jobs/docs.yml` | `verify-docs.yml` |
 | `jobs/ops.yml` | `code-analyzer.yml`, `reset-env-branches.yml`, `auto-tag-release.yml` |
@@ -22,7 +22,8 @@ This mirrors the three-layer model in
 ## Versioning parity
 
 - Pin reusable workflow `uses:` to a semver tag (e.g. `@v1.0.0`), not `@main`.
-- Keep workflow/action names aligned with GitLab type abbreviations (`inf-sto-obj`, `svc-api`, `vue-spa`, …).
+- Keep workflow/action names aligned with GitLab type abbreviations (`inf-sto-obj`, `svc-api`, `vue-spa`, `react-spa`, …).
+- React SPA starters call the existing `vue-*-deploy.yml` workflows. Those workflows run `npm run build` and sync `dist/`; they are not Vue-compiler specific.
 
 ## Adding a type/language
 
