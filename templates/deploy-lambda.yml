@@ -175,7 +175,7 @@ jobs:
       function_name: "{{ REPO_NAME }}"
       stack_name: ${{ needs.setup.outputs.stack_name }}
       environment: ${{ needs.setup.outputs.environment }}
-      aws_region: us-east-2
+      aws_region: ${{ vars.AWS_REGION }}
       python_version: "3.12"
       sam_template: template.yml
       run_tests: false # Already ran in test job

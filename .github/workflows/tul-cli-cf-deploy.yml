@@ -163,13 +163,13 @@ jobs:
       - name: Upload CLI package to S3
         run: |
           echo "=== Uploading CLI Package to S3 ==="
-          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${{ inputs.aws_region }}-${{ secrets.aws_account_id }}"
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-us-east-2-${{ secrets.aws_account_id }}"
           S3_KEY="cli-packages/${{ inputs.cli_name }}/cli-${{ github.sha }}.zip"
 
           aws s3 cp cli.zip "s3://${ARTIFACTS_BUCKET}/${S3_KEY}" \
             --sse aws:kms \
             --sse-kms-key-id ${{ inputs.kms_key_alias }} \
-            --region ${{ inputs.aws_region }}
+            --region us-east-2
 
           echo "s3_bucket=${ARTIFACTS_BUCKET}" >> $GITHUB_ENV
           echo "s3_key=${S3_KEY}" >> $GITHUB_ENV

@@ -212,7 +212,7 @@ jobs:
       function_name: YOUR_FUNCTION_NAME  # CUSTOMIZE: Your Lambda function name
       stack_name: ${{ needs.setup.outputs.stack_name }}
       environment: ${{ needs.setup.outputs.environment }}
-      aws_region: us-east-2              # CUSTOMIZE: Your AWS region
+      aws_region: ${{ vars.AWS_REGION }}
       python_version: "3.12"            # CUSTOMIZE: Your Python version
       sam_template: template.yml         # CUSTOMIZE: Path to your SAM template
       run_tests: false                   # Already ran in test job

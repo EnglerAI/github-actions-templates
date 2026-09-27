@@ -92,7 +92,7 @@ jobs:
     with:
       project_name: "YOUR_REPO_NAME"
       environment: ${{ needs.setup.outputs.environment }}
-      aws_region: us-east-2
+      aws_region: ${{ vars.AWS_REGION }}
       terraform_version: "1.14.3"
       terraform_directory: terraform
       state_bucket: ${{ needs.setup.outputs.environment == 'dev' && vars.TF_STATE_BUCKET_DEV || vars.TF_STATE_BUCKET_PRD }}

@@ -322,7 +322,7 @@ jobs:
 
           echo "=== Testing S3 Permissions ==="
 
-          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${{ inputs.aws_region }}-${{ secrets.aws_account_id }}"
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-us-east-2-${{ secrets.aws_account_id }}"
           ACTUAL_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 
           echo "Target Bucket: ${ARTIFACTS_BUCKET}"
@@ -331,7 +331,7 @@ jobs:
           # Verify bucket exists
           echo ""
           echo "1. Verifying bucket exists..."
-          if aws s3api head-bucket --bucket "${ARTIFACTS_BUCKET}" 2>&1; then
+          if aws s3api head-bucket --bucket "${ARTIFACTS_BUCKET}" --region us-east-2 2>&1; then
             echo "✅ Bucket exists and is accessible"
           else
             echo "❌ Bucket doesn't exist or not accessible"
@@ -340,7 +340,7 @@ jobs:
 
           echo ""
           echo "2. Testing ListBucket..."
-          if aws s3 ls "s3://${ARTIFACTS_BUCKET}/lambda-packages/" 2>&1; then
+          if aws s3 ls "s3://${ARTIFACTS_BUCKET}/lambda-packages/" --region us-east-2 2>&1; then
             echo "✅ ListBucket succeeded"
           else
             echo "⚠️  ListBucket failed (may need to create prefix)"
@@ -351,13 +351,14 @@ jobs:
           echo "test-content" > /tmp/test-permissions.txt
           if aws s3 cp /tmp/test-permissions.txt "s3://${ARTIFACTS_BUCKET}/test-github-actions-${{ github.run_id }}.txt" \
             --sse aws:kms \
-            --sse-kms-key-id ${{ inputs.kms_key_alias }} 2>&1; then
+            --sse-kms-key-id ${{ inputs.kms_key_alias }} \
+            --region us-east-2 2>&1; then
             echo "✅ PutObject succeeded"
 
             # Clean up test file
             echo ""
             echo "4. Testing DeleteObject..."
-            if aws s3 rm "s3://${ARTIFACTS_BUCKET}/test-github-actions-${{ github.run_id }}.txt" 2>&1; then
+            if aws s3 rm "s3://${ARTIFACTS_BUCKET}/test-github-actions-${{ github.run_id }}.txt" --region us-east-2 2>&1; then
               echo "✅ DeleteObject succeeded"
             else
               echo "⚠️  DeleteObject failed (not critical)"
@@ -393,7 +394,7 @@ jobs:
           echo "=== Uploading to S3 ==="
 
           # S3 bucket for artifacts (matches GitLab CI/CD approach)
-          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${{ inputs.aws_region }}-${{ secrets.aws_account_id }}"
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-us-east-2-${{ secrets.aws_account_id }}"
           S3_KEY="lambda-packages/${{ inputs.function_name }}/function-${{ github.sha }}.zip"
 
           echo "Bucket: ${ARTIFACTS_BUCKET}"
@@ -402,7 +403,8 @@ jobs:
           # Upload to S3 with KMS encryption (required by bucket policy)
           aws s3 cp function.zip "s3://${ARTIFACTS_BUCKET}/${S3_KEY}" \
             --sse aws:kms \
-            --sse-kms-key-id ${{ inputs.kms_key_alias }}
+            --sse-kms-key-id ${{ inputs.kms_key_alias }} \
+            --region us-east-2
 
           echo "s3_bucket=${ARTIFACTS_BUCKET}" >> $GITHUB_ENV
           echo "s3_key=${S3_KEY}" >> $GITHUB_ENV

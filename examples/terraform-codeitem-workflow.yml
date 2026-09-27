@@ -72,7 +72,7 @@ jobs:
       terraform_version: '1.12.2'
       terraform_directory: 'terraform'
       environment: ${{ needs.setup.outputs.environment }}
-      aws_region: us-east-2
+      aws_region: ${{ vars.AWS_REGION }}
       state_bucket: ${{ needs.setup.outputs.state_bucket }}
       state_key: ${{ needs.setup.outputs.state_key }}
       state_table: 'terraform-state-lock'
