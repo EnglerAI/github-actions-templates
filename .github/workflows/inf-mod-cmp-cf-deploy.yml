@@ -18,7 +18,7 @@ on:
         required: true
         type: string
       aws_region:
-        description: "AWS region"
+        description: "AWS region where resources are created. vars.AWS_REGION overrides this when set."
         required: true
         type: string
         default: "us-east-2"
@@ -60,7 +60,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_role_arn }}
-          aws-region: ${{ inputs.aws_region }}
+          aws-region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}
           role-session-name: github-actions-inf-mod-cmp-cf-deploy
 
       - name: Verify AWS Identity and Account
@@ -86,7 +86,7 @@ jobs:
           TEMPLATE_FILE="${{ inputs.template_file }}"
           ENV="${{ inputs.environment }}"
           CODEITEM_NAME="${{ inputs.codeitem_name }}"
-          AWS_REGION="${{ inputs.aws_region }}"
+          AWS_REGION="${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}"
           AWS_ACCOUNT_ID="${{ secrets.aws_account_id }}"
           REPO_NAME="${{ github.event.repository.name }}"
           SHORT_SHA="${GITHUB_SHA::7}"
@@ -137,6 +137,7 @@ jobs:
           echo "Template: ${TEMPLATE_FILE}"
           echo "Environment: ${ENV}"
           echo "Name: ${CODEITEM_NAME}"
+          echo "Deploy region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}"
           echo "Uploading nested module to s3://${ARTIFACTS_BUCKET}/${OBJECT_KEY} ..."
 
           if ! aws s3 cp "${MODULE_FILE}" "s3://${ARTIFACTS_BUCKET}/${OBJECT_KEY}" \
@@ -197,6 +198,6 @@ jobs:
           echo "=== CloudFormation Stack Info ==="
           aws cloudformation describe-stacks \
             --stack-name "${{ inputs.stack_name }}" \
-            --region "${{ inputs.aws_region }}" \
+            --region "${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}" \
             --query 'Stacks[0].{Status:StackStatus,Outputs:Outputs}' \
             --output table

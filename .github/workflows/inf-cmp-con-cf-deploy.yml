@@ -20,7 +20,7 @@ on:
         required: true
         type: string
       aws_region:
-        description: "AWS region"
+        description: "AWS region where resources are created. vars.AWS_REGION overrides this when set."
         required: true
         type: string
         default: "us-east-2"
@@ -108,7 +108,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_role_arn }}
-          aws-region: ${{ inputs.aws_region }}
+          aws-region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}
           role-session-name: github-actions-inf-cmp-con-cf-deploy
 
       - name: Install AWS CLI
@@ -207,6 +207,7 @@ jobs:
           done
 
           echo "Stack: ${STACK_NAME}"
+          echo "Deploy region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}"
           echo "Template: ${TEMPLATE_FILE}"
           echo "Environment: ${ENV}"
           echo "ClusterName: ${CLUSTER_NAME}"
@@ -219,7 +220,7 @@ jobs:
             --parameter-overrides ${PARAM_OVERRIDES} \
             ${CAPABILITY_ARGS} \
             --no-fail-on-empty-changeset \
-            --region "${{ inputs.aws_region }}"
+            --region "${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}"
 
           echo "✅ INF CMP CON CF deploy completed"
 
@@ -228,6 +229,6 @@ jobs:
           echo "=== CloudFormation Stack Info ==="
           aws cloudformation describe-stacks \
             --stack-name "${{ inputs.stack_name }}" \
-            --region "${{ inputs.aws_region }}" \
+            --region "${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}" \
             --query 'Stacks[0].{Status:StackStatus,Outputs:Outputs}' \
             --output table
