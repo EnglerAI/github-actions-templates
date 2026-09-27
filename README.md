@@ -4,6 +4,8 @@ Reusable GitHub Actions workflows for CloudBot codeitems. This repository mirror
 
 **Parity map:** [docs/PACK_TAXONOMY.md](docs/PACK_TAXONOMY.md) (GitLab packs ↔ GitHub workflows).
 
+`vue-static-deploy.yml`, `vue-cf-deploy.yml`, and `vue-terraform-deploy.yml` are the Vite SPA pack: `npm run build`, S3 sync of `dist/`, and CloudFront invalidation. Vue and React starters both call these workflows.
+
 ## 📁 Repository Structure
 
 ```
