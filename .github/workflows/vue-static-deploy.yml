@@ -10,7 +10,7 @@ on:
         required: true
         type: string
       aws_region:
-        description: "AWS region"
+        description: "AWS region where resources are created. vars.AWS_REGION overrides this when set."
         required: true
         type: string
         default: "us-east-2"
@@ -61,7 +61,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_role_arn }}
-          aws-region: ${{ inputs.aws_region }}
+          aws-region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}
           role-session-name: github-actions-vue-static-deploy
 
       - name: Verify AWS Account

@@ -16,7 +16,7 @@ on:
         required: true
         type: string
       aws_region:
-        description: "AWS region"
+        description: "AWS region where resources are created. vars.AWS_REGION overrides this when set."
         required: true
         type: string
         default: "us-east-2"
@@ -230,7 +230,7 @@ jobs:
       function_name: ${{ steps.deploy.outputs.function_name }}
     environment:
       name: ${{ inputs.environment }}
-      url: https://console.aws.amazon.com/lambda/home?region=${{ inputs.aws_region }}#/functions/${{ inputs.function_name }}-${{ inputs.environment }}
+      url: https://console.aws.amazon.com/lambda/home?region=${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}#/functions/${{ inputs.function_name }}-${{ inputs.environment }}
     permissions:
       id-token: write # Required for OIDC
       contents: read
@@ -245,7 +245,7 @@ jobs:
           echo "Environment: ${{ inputs.environment }}"
           echo "Function Name: ${{ inputs.function_name }}"
           echo "Stack Name: ${{ inputs.stack_name }}"
-          echo "AWS Region: ${{ inputs.aws_region }}"
+          echo "AWS Region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}"
           echo "Package Job Result: ${{ needs.package.result }}"
           echo "GitHub Event: ${{ github.event_name }}"
           echo "GitHub Ref: ${{ github.ref }}"
@@ -263,7 +263,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_role_arn }}
-          aws-region: ${{ inputs.aws_region }}
+          aws-region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}
           role-session-name: github-actions-lambda-deploy
 
       - name: Install AWS CLI and jq
@@ -297,7 +297,7 @@ jobs:
           echo "=== Identity Details ==="
           echo "Actual Account ID: ${ACTUAL_ACCOUNT}"
           echo "Expected Account ID: ${{ secrets.aws_account_id }}"
-          echo "Region: ${{ inputs.aws_region }}"
+          echo "Region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}"
 
           # Verify account matches
           if [ "${ACTUAL_ACCOUNT}" != "${{ secrets.aws_account_id }}" ]; then
@@ -468,7 +468,7 @@ jobs:
             --parameter-overrides ${PARAM_OVERRIDES} \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset \
-            --region ${{ inputs.aws_region }}
+            --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}
 
           echo "stack_name=${STACK_NAME}" >> $GITHUB_ENV
           echo "✅ SAM deployment completed"
@@ -488,7 +488,7 @@ jobs:
           # Get function name from stack outputs
           FUNCTION_NAME=$(aws cloudformation describe-stacks \
             --stack-name ${{ env.stack_name }} \
-            --region ${{ inputs.aws_region }} \
+            --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }} \
             --query 'Stacks[0].Outputs[?OutputKey==`LambdaFunctionName`].OutputValue' \
             --output text)
 
@@ -502,7 +502,7 @@ jobs:
           # Get function configuration
           aws lambda get-function-configuration \
             --function-name ${FUNCTION_NAME} \
-            --region ${{ inputs.aws_region }} \
+            --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }} \
             --query '{Runtime:Runtime,LastModified:LastModified,CodeSize:CodeSize,State:State,Version:Version}' \
             --output table
 
@@ -529,7 +529,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_role_arn }}
-          aws-region: ${{ inputs.aws_region }}
+          aws-region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}
           role-session-name: github-actions-smoke-test-${{ github.run_id }}
 
       - name: Install AWS CLI and jq
@@ -560,7 +560,7 @@ jobs:
             # Fallback: get from stack
             FUNCTION_NAME=$(aws cloudformation describe-stacks \
               --stack-name ${{ needs.deploy.outputs.stack_name }} \
-              --region ${{ inputs.aws_region }} \
+              --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }} \
               --query 'Stacks[0].Outputs[?OutputKey==`LambdaFunctionName`].OutputValue' \
               --output text)
           fi
@@ -576,7 +576,7 @@ jobs:
           # Wait for the function's configured timeout plus buffer for cold start.
           LAMBDA_TIMEOUT=$(aws lambda get-function-configuration \
             --function-name "${FUNCTION_NAME}" \
-            --region ${{ inputs.aws_region }} \
+            --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }} \
             --query 'Timeout' \
             --output text)
           if [ -z "${LAMBDA_TIMEOUT}" ] || [ "${LAMBDA_TIMEOUT}" = "None" ]; then
@@ -609,7 +609,7 @@ jobs:
             --cli-read-timeout "${CLI_READ_TIMEOUT}" \
             --cli-connect-timeout 10 \
             --payload "${PAYLOAD}" \
-            --region ${{ inputs.aws_region }} \
+            --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }} \
             response.json 2>invoke-stderr.txt)
           INVOKE_EXIT=$?
           set -e

@@ -16,7 +16,7 @@ on:
         required: true
         type: string
       aws_region:
-        description: "AWS region"
+        description: "AWS region where resources are created. vars.AWS_REGION overrides this when set."
         required: true
         type: string
         default: "us-east-2"
@@ -151,7 +151,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_role_arn }}
-          aws-region: ${{ inputs.aws_region }}
+          aws-region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}
           role-session-name: github-actions-tul-cli-cf-deploy
 
       - name: Install AWS CLI
@@ -205,7 +205,7 @@ jobs:
               NAME=${{ inputs.cli_name }} \
             --capabilities CAPABILITY_IAM \
             --no-fail-on-empty-changeset \
-            --region ${{ inputs.aws_region }}
+            --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}
 
           ARTIFACT_URI="s3://${{ env.s3_bucket }}/${{ env.s3_key }}"
           echo "stack_name=${STACK_NAME}" >> $GITHUB_OUTPUT

@@ -22,7 +22,7 @@ on:
         required: true
         type: string
       aws_region:
-        description: "AWS region"
+        description: "AWS region where resources are created. vars.AWS_REGION overrides this when set."
         required: false
         type: string
         default: "us-east-2"
@@ -80,7 +80,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_role_arn }}
-          aws-region: ${{ inputs.aws_region }}
+          aws-region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}
           role-session-name: github-actions-svc-api-cf-deploy
 
       - name: Verify AWS Account
@@ -133,7 +133,7 @@ jobs:
           set -e
           aws eks update-kubeconfig \
             --name "${{ inputs.cluster_name }}" \
-            --region "${{ inputs.aws_region }}"
+            --region "${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}"
 
       - name: Helm dependency update
         working-directory: k8s
@@ -152,7 +152,7 @@ jobs:
             --set "labels.app=${{ inputs.service_name }}" \
             --set "image.repository=${{ steps.meta.outputs.image_uri }}" \
             --set "image.tag=${{ steps.meta.outputs.image_tag }}" \
-            --set "env.AWS_REGION=${{ inputs.aws_region }}" \
+            --set "env.AWS_REGION=${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}" \
             --set "env.AWS_ACCOUNT_ID=${{ secrets.aws_account_id }}" \
             --set "env.ENVIRONMENT=${{ inputs.environment }}" \
             --set "env.TF_VAR_service_name=${{ inputs.service_name }}" \
@@ -207,14 +207,14 @@ jobs:
               CognitoUserPoolId="${{ secrets.cognito_user_pool_id }}" \
               NlbArn="${{ steps.nlb.outputs.nlb_arn }}" \
               NlbDnsName="${{ steps.nlb.outputs.nlb_dns }}" \
-              AwsRegion="${{ inputs.aws_region }}" \
+              AwsRegion="${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}" \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset \
-            --region "${{ inputs.aws_region }}"
+            --region "${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}"
 
           API_URL=$(aws cloudformation describe-stacks \
             --stack-name "${{ inputs.stack_name }}" \
-            --region "${{ inputs.aws_region }}" \
+            --region "${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}" \
             --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
             --output text)
           echo "✅ SVC API CloudFormation deploy complete — ${API_URL}"

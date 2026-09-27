@@ -18,7 +18,7 @@ on:
         required: true
         type: string
       aws_region:
-        description: "AWS region"
+        description: "AWS region where resources are created. vars.AWS_REGION overrides this when set."
         required: true
         type: string
         default: "us-east-2"
@@ -74,7 +74,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_role_arn }}
-          aws-region: ${{ inputs.aws_region }}
+          aws-region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}
           role-session-name: github-actions-vue-cf-deploy
 
       - name: Verify AWS Account
@@ -121,7 +121,7 @@ jobs:
             --parameter-overrides ${PARAM_OVERRIDES} \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset \
-            --region "${{ inputs.aws_region }}"
+            --region "${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}"
 
           echo "✅ Stack deploy complete"
 
@@ -132,7 +132,7 @@ jobs:
           STACK_NAME="${{ inputs.stack_name }}"
           OUTPUTS=$(aws cloudformation describe-stacks \
             --stack-name "${STACK_NAME}" \
-            --region "${{ inputs.aws_region }}" \
+            --region "${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}" \
             --query 'Stacks[0].Outputs' \
             --output json)
 

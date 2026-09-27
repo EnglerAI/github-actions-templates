@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       aws_region:
-        description: "AWS region"
+        description: "AWS region where resources are created. vars.AWS_REGION overrides this when set."
         required: true
         type: string
         default: "us-east-2"
@@ -90,7 +90,7 @@ jobs:
           echo "=== Deploy Job Debug Info ==="
           echo "Environment: ${{ inputs.environment }}"
           echo "Stack Name: ${{ inputs.stack_name }}"
-          echo "AWS Region: ${{ inputs.aws_region }}"
+          echo "AWS Region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}"
           echo "Template: ${{ inputs.template_file }}"
           echo "GitHub Event: ${{ github.event_name }}"
           echo "GitHub Ref: ${{ github.ref }}"
@@ -106,7 +106,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_role_arn }}
-          aws-region: ${{ inputs.aws_region }}
+          aws-region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}
           role-session-name: github-actions-cf-deploy
 
       - name: Install AWS CLI
@@ -131,7 +131,7 @@ jobs:
           echo "=== Identity Details ==="
           echo "Actual Account ID: ${ACTUAL_ACCOUNT}"
           echo "Expected Account ID: ${{ secrets.aws_account_id }}"
-          echo "Region: ${{ inputs.aws_region }}"
+          echo "Region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}"
 
           # Verify account matches
           if [ "${ACTUAL_ACCOUNT}" != "${{ secrets.aws_account_id }}" ]; then
@@ -259,7 +259,7 @@ jobs:
             --parameter-overrides ${PARAM_OVERRIDES} \
             ${CAPABILITY_ARGS} \
             --no-fail-on-empty-changeset \
-            --region ${{ inputs.aws_region }}
+            --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}
 
           echo "stack_name=${STACK_NAME}" >> $GITHUB_OUTPUT
           echo "✅ CloudFormation deployment completed"
@@ -273,7 +273,7 @@ jobs:
           # Get stack status
           aws cloudformation describe-stacks \
             --stack-name ${STACK_NAME} \
-            --region ${{ inputs.aws_region }} \
+            --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }} \
             --query 'Stacks[0].{Status:StackStatus,Outputs:Outputs}' \
             --output table
 
@@ -281,7 +281,7 @@ jobs:
           echo "=== Stack Outputs ==="
           aws cloudformation describe-stacks \
             --stack-name ${STACK_NAME} \
-            --region ${{ inputs.aws_region }} \
+            --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }} \
             --query 'Stacks[0].Outputs' \
             --output json | jq .
 

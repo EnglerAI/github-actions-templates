@@ -16,7 +16,7 @@ on:
         required: true
         type: string
       aws_region:
-        description: "AWS region"
+        description: "AWS region where resources are created. vars.AWS_REGION overrides this when set."
         required: true
         type: string
         default: "us-east-2"
@@ -169,7 +169,7 @@ jobs:
       layer_arn: ${{ steps.deploy.outputs.layer_arn }}
     environment:
       name: ${{ inputs.environment }}
-      url: https://console.aws.amazon.com/lambda/home?region=${{ inputs.aws_region }}#/layers
+      url: https://console.aws.amazon.com/lambda/home?region=${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}#/layers
     permissions:
       id-token: write # Required for OIDC
       contents: read
@@ -190,7 +190,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_role_arn }}
-          aws-region: ${{ inputs.aws_region }}
+          aws-region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}
           role-session-name: github-actions-layer-deploy
 
       - name: Install AWS CLI
@@ -234,11 +234,11 @@ jobs:
           fi
 
           # Check if stack exists
-          if aws cloudformation describe-stacks --stack-name ${STACK_NAME} --region ${{ inputs.aws_region }} &>/dev/null; then
+          if aws cloudformation describe-stacks --stack-name ${STACK_NAME} --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }} &>/dev/null; then
             echo "✅ Stack '${STACK_NAME}' exists - will be updated"
             aws cloudformation describe-stacks \
               --stack-name ${STACK_NAME} \
-              --region ${{ inputs.aws_region }} \
+              --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }} \
               --query 'Stacks[0].{StackName:StackName,StackStatus:StackStatus,CreationTime:CreationTime}' \
               --output table
           else
@@ -247,11 +247,11 @@ jobs:
 
           # Check if SSM parameter exists (if layer_name-latest pattern is used)
           SSM_PARAM_NAME="${{ inputs.layer_name }}-latest"
-          if aws ssm get-parameter --name "${SSM_PARAM_NAME}" --region ${{ inputs.aws_region }} &>/dev/null 2>&1; then
+          if aws ssm get-parameter --name "${SSM_PARAM_NAME}" --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }} &>/dev/null 2>&1; then
             echo "✅ SSM parameter '${SSM_PARAM_NAME}' exists"
             CURRENT_ARN=$(aws ssm get-parameter \
               --name "${SSM_PARAM_NAME}" \
-              --region ${{ inputs.aws_region }} \
+              --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }} \
               --query 'Parameter.Value' \
               --output text 2>/dev/null || echo "N/A")
             echo "   Current Layer ARN: ${CURRENT_ARN}"
@@ -312,7 +312,7 @@ jobs:
               NAME=${{ inputs.layer_name }} \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset \
-            --region ${{ inputs.aws_region }}
+            --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}
 
           echo "stack_name=${STACK_NAME}" >> $GITHUB_ENV
           echo "✅ SAM deployment completed"
@@ -334,7 +334,7 @@ jobs:
           # Get layer ARN from CloudFormation stack outputs
           LAYER_ARN=$(aws cloudformation describe-stacks \
             --stack-name ${STACK_NAME} \
-            --region ${{ inputs.aws_region }} \
+            --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }} \
             --query 'Stacks[0].Outputs[?OutputKey==`LayerVersionArn`].OutputValue' \
             --output text 2>/dev/null || echo "")
 
@@ -343,7 +343,7 @@ jobs:
             SSM_PARAM_NAME="${{ inputs.layer_name }}-latest"
             LAYER_ARN=$(aws ssm get-parameter \
               --name "${SSM_PARAM_NAME}" \
-              --region ${{ inputs.aws_region }} \
+              --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }} \
               --query 'Parameter.Value' \
               --output text 2>/dev/null || echo "")
           fi
@@ -371,7 +371,7 @@ jobs:
           # Get stack status
           aws cloudformation describe-stacks \
             --stack-name ${STACK_NAME} \
-            --region ${{ inputs.aws_region }} \
+            --region ${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }} \
             --query 'Stacks[0].{StackName:StackName,StackStatus:StackStatus}' \
             --output table
 
