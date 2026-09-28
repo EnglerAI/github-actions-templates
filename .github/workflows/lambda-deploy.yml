@@ -393,23 +393,57 @@ jobs:
 
           echo "=== Uploading to S3 ==="
 
-          # S3 bucket for artifacts (matches GitLab CI/CD approach)
-          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-us-east-2-${{ secrets.aws_account_id }}"
+          # Platform artifact bucket stays in us-east-2; DEPLOY_REGION is the stack region.
+          DEPLOY_REGION="${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}"
+          ACCOUNT_ID="${{ secrets.aws_account_id }}"
+          ARTIFACTS_REGION="us-east-2"
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${ARTIFACTS_REGION}-${ACCOUNT_ID}"
           S3_KEY="lambda-packages/${{ inputs.function_name }}/function-${{ github.sha }}.zip"
 
           echo "Bucket: ${ARTIFACTS_BUCKET}"
           echo "Key: ${S3_KEY}"
+          echo "Deploy region: ${DEPLOY_REGION}"
 
-          # Upload to S3 with KMS encryption (required by bucket policy)
+          # Upload to S3 with KMS encryption (required by the platform bucket policy)
           aws s3 cp function.zip "s3://${ARTIFACTS_BUCKET}/${S3_KEY}" \
             --sse aws:kms \
             --sse-kms-key-id ${{ inputs.kms_key_alias }} \
-            --region us-east-2
+            --region "${ARTIFACTS_REGION}"
 
-          echo "s3_bucket=${ARTIFACTS_BUCKET}" >> $GITHUB_ENV
-          echo "s3_key=${S3_KEY}" >> $GITHUB_ENV
+          # Lambda GetObject requires the zip in the function region.
+          CODE_BUCKET="${ARTIFACTS_BUCKET}"
+          CODE_KEY="${S3_KEY}"
+          if [ "${DEPLOY_REGION}" != "${ARTIFACTS_REGION}" ]; then
+            CODE_BUCKET="cloudbot-codepipeline-artifacts-fn-${DEPLOY_REGION}-${ACCOUNT_ID}"
+            echo "Staging function.zip for Lambda in ${DEPLOY_REGION}: s3://${CODE_BUCKET}/${CODE_KEY}"
+            if ! aws s3api head-bucket --bucket "${CODE_BUCKET}" --region "${DEPLOY_REGION}" >/dev/null 2>&1; then
+              echo "Creating code bucket ${CODE_BUCKET}"
+              if [ "${DEPLOY_REGION}" = "us-east-1" ]; then
+                aws s3api create-bucket --bucket "${CODE_BUCKET}" --region "${DEPLOY_REGION}" \
+                  || aws s3api head-bucket --bucket "${CODE_BUCKET}" --region "${DEPLOY_REGION}"
+              else
+                aws s3api create-bucket --bucket "${CODE_BUCKET}" --region "${DEPLOY_REGION}" \
+                  --create-bucket-configuration "LocationConstraint=${DEPLOY_REGION}" \
+                  || aws s3api head-bucket --bucket "${CODE_BUCKET}" --region "${DEPLOY_REGION}"
+              fi
+              aws s3api put-public-access-block \
+                --bucket "${CODE_BUCKET}" \
+                --region "${DEPLOY_REGION}" \
+                --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+              aws s3api put-bucket-encryption \
+                --bucket "${CODE_BUCKET}" \
+                --region "${DEPLOY_REGION}" \
+                --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"},"BucketKeyEnabled":true}]}'
+            fi
+            aws s3 cp function.zip "s3://${CODE_BUCKET}/${CODE_KEY}" \
+              --sse AES256 \
+              --region "${DEPLOY_REGION}"
+          fi
 
-          echo "✅ Package uploaded to S3 with KMS encryption"
+          echo "s3_bucket=${CODE_BUCKET}" >> $GITHUB_ENV
+          echo "s3_key=${CODE_KEY}" >> $GITHUB_ENV
+
+          echo "✅ Package uploaded to S3"
 
       - name: Deploy with SAM
         run: |
@@ -459,6 +493,28 @@ jobs:
             echo "VPC Configuration: SecurityGroup=${SECURITY_GROUP_ID}, Subnets=${SUBNET_IDS}"
           else
             echo "No VPC configuration provided - deploying without VPC"
+          fi
+
+          # Stage logging requires the account CloudWatch role in the stack region.
+          # The role is global; the API Gateway account setting is per region.
+          DEPLOY_REGION="${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}"
+          ACCOUNT_ID="${{ secrets.aws_account_id }}"
+          APIGW_CLOUDWATCH_ROLE_NAME="${APIGW_CLOUDWATCH_ROLE_NAME:-APIGatewayToCloudWatchLogs}"
+          APIGW_CLOUDWATCH_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${APIGW_CLOUDWATCH_ROLE_NAME}"
+          if ! aws iam get-role --role-name "${APIGW_CLOUDWATCH_ROLE_NAME}" >/dev/null 2>&1; then
+            echo "❌ Error: IAM role ${APIGW_CLOUDWATCH_ROLE_ARN} not found"
+            exit 1
+          fi
+          CURRENT_APIGW_ROLE=$(aws apigateway get-account --region "${DEPLOY_REGION}" --query cloudwatchRoleArn --output text)
+          if [ -z "${CURRENT_APIGW_ROLE}" ] || [ "${CURRENT_APIGW_ROLE}" = "None" ] || [ "${CURRENT_APIGW_ROLE}" = "null" ]; then
+            echo "Setting API Gateway CloudWatch role in ${DEPLOY_REGION} to ${APIGW_CLOUDWATCH_ROLE_ARN}"
+            aws apigateway update-account \
+              --region "${DEPLOY_REGION}" \
+              --patch-operations "op=replace,path=/cloudwatchRoleArn,value=${APIGW_CLOUDWATCH_ROLE_ARN}"
+            echo "Waiting for API Gateway account setting to propagate"
+            sleep 20
+          else
+            echo "API Gateway CloudWatch role in ${DEPLOY_REGION}: ${CURRENT_APIGW_ROLE}"
           fi
 
           # Deploy using SAM (matches GitLab CI/CD approach)
