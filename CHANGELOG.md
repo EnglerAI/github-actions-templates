@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed - Lambda deploy outside the platform region
+
+- Stage a same-region copy of the zip when the stack region is not `us-east-2` (`lambda-deploy.yml`, `lambda-layer-deploy.yml`, `lambda-terraform-deploy.yml`, `lambda-layer-terraform-deploy.yml`). Lambda cannot `GetObject` a package that lives in another region.
+- Set the API Gateway account CloudWatch role (`APIGatewayToCloudWatchLogs`) in the stack region when that setting is empty, so stage logging can be enabled outside `us-east-2`.
+
 ### Added - React SPA consumers of the Vite SPA pack
 
 - Vue workflows (`vue-static-deploy.yml`, `vue-cf-deploy.yml`, `vue-terraform-deploy.yml`) are the shared Vite SPA deploy path for Vue and React. React starters call them directly. No separate React workflow files.

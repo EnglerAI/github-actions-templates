@@ -203,23 +203,56 @@ jobs:
         run: |
           echo "=== Uploading Layer Package to S3 ==="
 
-          # S3 bucket for artifacts (matches GitLab CI/CD approach)
-          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-us-east-2-${{ secrets.aws_account_id }}"
+          # Platform artifact bucket stays in us-east-2; DEPLOY_REGION is the stack region.
+          DEPLOY_REGION="${{ vars.AWS_REGION != '' && vars.AWS_REGION || inputs.aws_region }}"
+          ACCOUNT_ID="${{ secrets.aws_account_id }}"
+          ARTIFACTS_REGION="us-east-2"
+          ARTIFACTS_BUCKET="cloudbot-codepipeline-artifacts-${ARTIFACTS_REGION}-${ACCOUNT_ID}"
           S3_KEY="lambda-packages/${{ inputs.layer_name }}/layer-${{ github.sha }}.zip"
 
           echo "Bucket: ${ARTIFACTS_BUCKET}"
           echo "Key: ${S3_KEY}"
+          echo "Deploy region: ${DEPLOY_REGION}"
 
-          # Upload to S3 with KMS encryption (required by bucket policy)
           aws s3 cp layer.zip "s3://${ARTIFACTS_BUCKET}/${S3_KEY}" \
             --sse aws:kms \
             --sse-kms-key-id ${{ inputs.kms_key_alias }} \
-            --region us-east-2
+            --region "${ARTIFACTS_REGION}"
 
-          echo "s3_bucket=${ARTIFACTS_BUCKET}" >> $GITHUB_ENV
-          echo "s3_key=${S3_KEY}" >> $GITHUB_ENV
+          # Lambda layer ContentUri must be in the layer region.
+          CODE_BUCKET="${ARTIFACTS_BUCKET}"
+          CODE_KEY="${S3_KEY}"
+          if [ "${DEPLOY_REGION}" != "${ARTIFACTS_REGION}" ]; then
+            CODE_BUCKET="cloudbot-codepipeline-artifacts-fn-${DEPLOY_REGION}-${ACCOUNT_ID}"
+            echo "Staging layer.zip for Lambda in ${DEPLOY_REGION}: s3://${CODE_BUCKET}/${CODE_KEY}"
+            if ! aws s3api head-bucket --bucket "${CODE_BUCKET}" --region "${DEPLOY_REGION}" >/dev/null 2>&1; then
+              echo "Creating code bucket ${CODE_BUCKET}"
+              if [ "${DEPLOY_REGION}" = "us-east-1" ]; then
+                aws s3api create-bucket --bucket "${CODE_BUCKET}" --region "${DEPLOY_REGION}" \
+                  || aws s3api head-bucket --bucket "${CODE_BUCKET}" --region "${DEPLOY_REGION}"
+              else
+                aws s3api create-bucket --bucket "${CODE_BUCKET}" --region "${DEPLOY_REGION}" \
+                  --create-bucket-configuration "LocationConstraint=${DEPLOY_REGION}" \
+                  || aws s3api head-bucket --bucket "${CODE_BUCKET}" --region "${DEPLOY_REGION}"
+              fi
+              aws s3api put-public-access-block \
+                --bucket "${CODE_BUCKET}" \
+                --region "${DEPLOY_REGION}" \
+                --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+              aws s3api put-bucket-encryption \
+                --bucket "${CODE_BUCKET}" \
+                --region "${DEPLOY_REGION}" \
+                --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"},"BucketKeyEnabled":true}]}'
+            fi
+            aws s3 cp layer.zip "s3://${CODE_BUCKET}/${CODE_KEY}" \
+              --sse AES256 \
+              --region "${DEPLOY_REGION}"
+          fi
 
-          echo "✅ Layer package uploaded to S3 with KMS encryption"
+          echo "s3_bucket=${CODE_BUCKET}" >> $GITHUB_ENV
+          echo "s3_key=${CODE_KEY}" >> $GITHUB_ENV
+
+          echo "✅ Layer package uploaded to S3"
 
       - name: Check existing resources
         run: |
