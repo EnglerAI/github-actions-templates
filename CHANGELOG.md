@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed - Nested CloudFormation module outside the platform region
+
+- `inf-mod-cmp-cf-deploy.yml` stages `modules/compute.yml` in `cloudbot-codepipeline-artifacts-fn-<region>-<account>` when the stack region is not `us-east-2`. CloudFormation requires the nested `TemplateURL` in the stack region. Upload failures report `NoSuchBucket` separately from an identity-policy denial.
+
 ### Fixed - Lambda deploy outside the platform region
 
 - Stage a same-region copy of the zip when the stack region is not `us-east-2` (`lambda-deploy.yml`, `lambda-layer-deploy.yml`, `lambda-terraform-deploy.yml`, `lambda-layer-terraform-deploy.yml`). Lambda cannot `GetObject` a package that lives in another region.
